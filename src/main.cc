@@ -6,7 +6,7 @@
 #include "polyscope/point_cloud.h"
 #include <stdint.h>
 
-void triangulate_points(cv::Mat img_1, cv::Mat img_2, double focal, cv::Point2d pp)
+void triangulate_points(cv::Mat img_1, cv::Mat img_2, std::vector<cv::Point2f> points_1, double focal, cv::Point2d pp, cv::Mat &R, cv::Mat &t, cv::Mat &world_points)
 {
     std::vector<cv::Point2f> p0, p1;
 
@@ -16,8 +16,6 @@ void triangulate_points(cv::Mat img_1, cv::Mat img_2, double focal, cv::Point2d 
     std::vector<float> error;
 
     std::vector<cv::Point2f> points_2;
-    std::vector<cv::Point2f> points_1;
-    cv::goodFeaturesToTrack(img_1, points_1, 2000, 0.01, 10, cv::Mat(), 3, 3, 0, 0.4);
     //std::cout << points_1.size() << std::endl;
     cv::TermCriteria criteria = cv::TermCriteria((cv::TermCriteria::COUNT) + (cv::TermCriteria::EPS), 10, 0.03);
     cv::calcOpticalFlowPyrLK(img_1, img_2, points_1, points_2, status, error, cv::Size(15,15), 2, criteria);
@@ -37,10 +35,48 @@ void triangulate_points(cv::Mat img_1, cv::Mat img_2, double focal, cv::Point2d 
     points_2.resize(k);
 
     cv::Mat essential_matrix = cv::findEssentialMat(points_1, points_2, focal, pp, cv::RANSAC, 0.999, 1.0, 1000);
-
     std::cout << "Essential Matrix: " << essential_matrix << std::endl;
+
     // recoverPose
+    std::vector<uchar> mask;
+    cv::recoverPose(essential_matrix, points_2, points_1, R, t, focal, pp, mask);
+    std::cout << "Pose: " << R << "    " << t << std::endl;
+
     // triangulatePoints
+    cv::Mat proj_mat_1, proj_mat_2, points4D;
+    std::cout << CV_32F << " CV_32F\n";
+    cv::Mat R_t(cv::Size(4,3), CV_32F, 0.0);
+    cv::Mat R_t_2(cv::Size(4,3), CV_32F, 0.0);
+    cv::Mat intrinsics(cv::Size(3,3), CV_32F, 0.0);
+
+    R_t.at<float>(0,0) = 1;
+    R_t.at<float>(1,1) = 1;
+    R_t.at<float>(2,2) = 1;
+
+    R.copyTo(R_t_2(cv::Range::all(), cv::Range(0, 3)));
+    t.copyTo(R_t_2.col(3));
+
+    intrinsics.at<float>(0,0) = focal;
+    intrinsics.at<float>(1,1) = focal;
+    intrinsics.at<float>(0,2) = pp.x;
+    intrinsics.at<float>(1,2) = pp.y;
+    intrinsics.at<float>(2,2) = 1.0;
+
+    std::cout << "Intrinsics: " << intrinsics << " and R_t: " << R_t_2 << std::endl;
+
+    cv::Mat projectionMatrix_1 = intrinsics * R_t;
+    cv::Mat projectionMatrix_2 = intrinsics * R_t_2;
+
+    cv::Mat world_points_m;
+
+    cv::triangulatePoints(projectionMatrix_1,
+                          projectionMatrix_2,
+                          points_1,
+                          points_2,
+                          world_points_m
+                          );
+
+    cv::convertPointsFromHomogeneous(world_points_m.t(), world_points);
 
 }
 
@@ -79,26 +115,29 @@ int main(int argc, char** argv )
     cv::Point2f pp;
     pp.x = 0.0;
     pp.y = 0.0;
-    triangulate_points(image_1, image_2, 700.0, pp);
+    cv::Mat world_points;
+    cv::Mat R, t;
+    triangulate_points(image_1, image_2, points_1, 700.0, pp, R, t, world_points);
     // visualize!
+    //
+    std::vector<glm::vec3> world_glm;
 
-    polyscope::PointCloud* psCloud = polyscope::registerPointCloud("really great points", points);
+    for (int i = 0; i < world_points.rows; i++)
+    {
+        world_glm.push_back(
+            glm::vec3(
+                world_points.at<float>(i, 0),
+                world_points.at<float>(i, 1),
+                world_points.at<float>(i, 2)
+            )
+        );
+    }
+
+    polyscope::PointCloud* psCloud = polyscope::registerPointCloud("really great points", world_glm);
 
     // set some options
-    psCloud->setPointRadius(0.02);
+    psCloud->setPointRadius(0.002);
     psCloud->setPointRenderMode(polyscope::PointRenderMode::Quad);
     polyscope::show();
-    //cv::Mat image;
-    //image = cv::imread( argv[1], 1 );
-
-    //if ( !image.data )
-    //{
-    //    printf("No image data \n");
-    //    return -1;
-    //}
-
-    //cv::namedWindow("Display Image", cv::WINDOW_AUTOSIZE );
-    //cv::imshow("Display Image", image);
-    //cv::waitKey(0);
     return 0;
 }
