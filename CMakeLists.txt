@@ -7,11 +7,12 @@ include_directories( ${OpenCV_INCLUDE_DIRS} )
 find_package( Ceres REQUIRED )
 include_directories( ${Ceres_INCLUDE_DIRS} )
 
+set( CMAKE_BUILD_TYPE debug )
+
 find_package( glog REQUIRED )
 include_directories( ${glog_INCLUDE_DIRS} )
 
 add_subdirectory("polyscope")
-
 
 file ( GLOB MAINSRCS src/main.cc )
 file ( GLOB BASRCS src/bundle_adjustment_simple.cc )
