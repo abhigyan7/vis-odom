@@ -5,80 +5,111 @@
 #include "polyscope/polyscope.h"
 #include "polyscope/point_cloud.h"
 #include <stdint.h>
+#include "triangulate.h"
 
-void triangulate_points(cv::Mat img_1, cv::Mat img_2, std::vector<cv::Point2f> points_1, double focal, cv::Point2d pp, cv::Mat &R, cv::Mat &t, cv::Mat &world_points)
-{
-    std::vector<cv::Point2f> p0, p1;
+//TODO create constructors
+//TODO build pose graph from triangulated data
+//TODO encapsulate triangulation state into a class
 
-    cv::goodFeaturesToTrack(img_1, p0, 100, 0.3, 7, cv::Mat(), 7, false, 0.04);
+typedef Eigen::Vector3f WorldPoint;
+typedef Eigen::Vector2f ImagePoint;
 
-    std::vector<uchar> status;
-    std::vector<float> error;
+class Frame {
+    public:
+        cv::Mat image;
+        // maps point id (WorldPoint.id) to its projection in this frame
+        std::unordered_map<int, ImagePoint> projected_points;
+        Eigen::Matrix3f R;
+        Eigen::Vector3f t;
+};
 
-    std::vector<cv::Point2f> points_2;
-    //std::cout << points_1.size() << std::endl;
-    cv::TermCriteria criteria = cv::TermCriteria((cv::TermCriteria::COUNT) + (cv::TermCriteria::EPS), 10, 0.03);
-    cv::calcOpticalFlowPyrLK(img_1, img_2, points_1, points_2, status, error, cv::Size(15,15), 2, criteria);
+class WorldMap {
+    private:
+        std::vector<WorldPoint> world_points;
+        std::vector<Frame> frames;
+        cv::Mat img_1, img_2;
+        std::vector<cv::Point2f> points_1;
+        std::vector<cv::Point2f> points_2;
+        double focal;
+        cv::Point2f pp;
 
-    std::cout << "calculated optical flow" << std::endl;
-
-    size_t i, k;
-    for (i = k = 0; i < points_1.size(); i++)
+    public:
+    WorldMap (double focal, cv::Point2f pp)
     {
-        if (! status[i])
-            continue;
-        points_1[k++] = points_1[i];
-        points_2[k] = points_2[i];
+        this->focal = focal;
+        this->pp = pp;
     }
 
-    points_1.resize(k);
-    points_2.resize(k);
+    bool register_new_image(cv::Mat &new_img)
+    {
 
-    cv::Mat essential_matrix = cv::findEssentialMat(points_1, points_2, focal, pp, cv::RANSAC, 0.999, 1.0, 1000);
-    std::cout << "Essential Matrix: " << essential_matrix << std::endl;
+        if (this->frames.size() == 0)
+        {
+            Frame frame_1;
+            frame_1.image = new_img;
+            this->frames.push_back(frame_1);
+            this->img_1 = new_img;
 
-    // recoverPose
-    std::vector<uchar> mask;
-    cv::recoverPose(essential_matrix, points_2, points_1, R, t, focal, pp, mask);
-    std::cout << "Pose: " << R << "    " << t << std::endl;
+            return true;
+        }
+        Frame frame_2;
+        frame_2.image = new_img;
+        this->frames.push_back(frame_2);
+        this->img_2 = new_img;
+        this->img_2 = new_img;
+        auto orb_detector = cv::ORB::create();
 
-    // triangulatePoints
-    cv::Mat proj_mat_1, proj_mat_2, points4D;
-    std::cout << CV_32F << " CV_32F\n";
-    cv::Mat R_t(cv::Size(4,3), CV_32F, 0.0);
-    cv::Mat R_t_2(cv::Size(4,3), CV_32F, 0.0);
-    cv::Mat intrinsics(cv::Size(3,3), CV_32F, 0.0);
+        auto feature_matcher = cv::BFMatcher::create();
 
-    R_t.at<float>(0,0) = 1;
-    R_t.at<float>(1,1) = 1;
-    R_t.at<float>(2,2) = 1;
+        std::vector<uchar> status;
+        std::vector<float> error;
 
-    R.copyTo(R_t_2(cv::Range::all(), cv::Range(0, 3)));
-    t.copyTo(R_t_2.col(3));
+        std::vector<cv::KeyPoint> keypoints_1;
+        std::vector<cv::KeyPoint> keypoints_2;
+        cv::Mat descriptors_1;
+        cv::Mat descriptors_2;
+        orb_detector->detectAndCompute(this->img_2, cv::Mat(), keypoints_1, descriptors_1);
+        orb_detector->detectAndCompute(this->img_2, cv::Mat(), keypoints_2, descriptors_2);
 
-    intrinsics.at<float>(0,0) = focal;
-    intrinsics.at<float>(1,1) = focal;
-    intrinsics.at<float>(0,2) = pp.x;
-    intrinsics.at<float>(1,2) = pp.y;
-    intrinsics.at<float>(2,2) = 1.0;
+        std::vector<cv::DMatch> matches;
+        feature_matcher->match(descriptors_1, descriptors_2, matches);
 
-    std::cout << "Intrinsics: " << intrinsics << " and R_t: " << R_t_2 << std::endl;
+        std::vector<cv::Point2f> points_1, points_2;
+        std::vector<cv::Point2f> temp_points_1, temp_points_2;
+        cv::KeyPoint::convert(keypoints_1, temp_points_1);
+        cv::KeyPoint::convert(keypoints_2, temp_points_2);
 
-    cv::Mat projectionMatrix_1 = intrinsics * R_t;
-    cv::Mat projectionMatrix_2 = intrinsics * R_t_2;
+        for (auto match : matches)
+        {
+            points_1.push_back(temp_points_1[match.queryIdx]);
+            points_2.push_back(temp_points_2[match.trainIdx]);
+            1;
+        }
 
-    cv::Mat world_points_m;
+        std::cout << "Pushed frame: " << this->frames.size() << std::endl;
+        this->img_1 = img_2;
 
-    cv::triangulatePoints(projectionMatrix_1,
-                          projectionMatrix_2,
-                          points_1,
-                          points_2,
-                          world_points_m
-                          );
+        //std::vector<cv::Point2f> points_2;
+        //std::cout << points_1.size() << std::endl;
 
-    cv::convertPointsFromHomogeneous(world_points_m.t(), world_points);
+        //size_t i, k;
+        //for (i = k = 0; i < this->points_1.size(); i++)
+        //{
+        //    if (! status[i])
+        //        continue;
+        //    this->points_1[k++] = this->points_1[i];
+        //    this->points_2[k  ] = this->points_2[i];
+        //}
 
-}
+        //this->points_1.resize(k);
+        //this->points_2.resize(k);
+
+        return true;
+
+    }
+};
+
+
 
 int main(int argc, char** argv )
 {
@@ -89,36 +120,31 @@ int main(int argc, char** argv )
     }
     cv::VideoCapture vidcap;
     vidcap.open(argv[1]);
-    polyscope::init();
+    //polyscope::init();
     std::vector<glm::vec3> points;
 
-    //// generate points
-    //for (size_t i = 0; i < 3000; i++) {
-    //  points.push_back(
-    //      glm::vec3{polyscope::randomUnit() - .5,
-    //                polyscope::randomUnit() - .5,
-    //                polyscope::randomUnit() - .5});
-    //}
-
-    cv::Mat image_1c, image_2c;
-    cv::Mat image_1, image_2;
-    vidcap >> image_1c;
-    cv::cvtColor(image_1c, image_1, cv::COLOR_BGR2GRAY);
-
-    vidcap >> image_2c;
-    cv::cvtColor(image_2c, image_2, cv::COLOR_BGR2GRAY);
-
-    std::vector<cv::Point2f> points_1;
-    cv::goodFeaturesToTrack(image_1, points_1, 2000, 0.01, 10, cv::Mat(), 3, 3, 0, 0.4);
-    std::cout << "Found these points: " << points_1 << std::endl;
-    //void triangulate_points(cv::Mat img_1, cv::Mat img_2, std::vector<cv::Point2f> points_1, double focal, cv::Point2d pp)
     cv::Point2f pp;
     pp.x = 0.0;
     pp.y = 0.0;
+
+    WorldMap map(700.0, pp);
+    cv::Mat image, image_c;
+
+    bool has_new_frames = true;
+    has_new_frames = vidcap.read(image_c);
+    while (has_new_frames)
+    {
+        cv::cvtColor(image_c, image, cv::COLOR_BGR2GRAY);
+        map.register_new_image(image);
+        has_new_frames = vidcap.read(image_c);
+    }
+
     cv::Mat world_points;
     cv::Mat R, t;
-    triangulate_points(image_1, image_2, points_1, 700.0, pp, R, t, world_points);
+    //triangulate_points(image_1, image_2, points_1, 700.0, pp, R, t, world_points);
     // visualize!
+    //
+    return 0;
     //
     std::vector<glm::vec3> world_glm;
 
