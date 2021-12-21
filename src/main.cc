@@ -1,6 +1,6 @@
 #include "polyscope/point_cloud.h"
 #include "polyscope/polyscope.h"
-#include "triangulate.h"
+#include "triangulate.hh"
 #include <Eigen/Eigen>
 #include <iostream>
 #include <opencv2/opencv.hpp>
@@ -8,7 +8,10 @@
 #include <stdio.h>
 
 // DONE create constructors
-// TODO triangulate points from image pairs
+// DONE triangulate points from image pairs
+// TODO Create correspondences from optical flow results
+// TODO Create associated pose graph-y thing using optical flow - mask off
+// existing points when searching for new ones
 // TODO build pose graph from triangulated data
 // TODO encapsulate triangulation state into a class
 
@@ -33,11 +36,15 @@ private:
   std::vector<cv::Point2f> points_2;
   double focal;
   cv::Point2f pp;
+  size_t min_points_per_frame;
+  cv::ORB *detector;
 
 public:
-  WorldMap(double focal, cv::Point2f pp) {
+  WorldMap(double focal, cv::Point2f pp, size_t min_points = 500) {
     this->focal = focal;
     this->pp = pp;
+    this->min_points_per_frame = min_points;
+    this->detector = cv::ORB::create();
   }
 
   bool register_new_image(cv::Mat &new_img) {
@@ -56,7 +63,6 @@ public:
     this->frames.push_back(frame_2);
     this->img_2 = new_img;
     this->img_2 = new_img;
-    auto orb_detector = cv::ORB::create();
 
     auto feature_matcher = cv::BFMatcher::create();
 
@@ -67,10 +73,10 @@ public:
     std::vector<cv::KeyPoint> keypoints_2;
     cv::Mat descriptors_1;
     cv::Mat descriptors_2;
-    orb_detector->detectAndCompute(this->img_2, cv::Mat(), keypoints_1,
-                                   descriptors_1);
-    orb_detector->detectAndCompute(this->img_2, cv::Mat(), keypoints_2,
-                                   descriptors_2);
+    detector->detectAndCompute(this->img_2, cv::Mat(), keypoints_1,
+                               descriptors_1);
+    detector->detectAndCompute(this->img_2, cv::Mat(), keypoints_2,
+                               descriptors_2);
 
     std::vector<cv::DMatch> matches;
     feature_matcher->match(descriptors_1, descriptors_2, matches);
