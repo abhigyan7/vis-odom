@@ -37,14 +37,12 @@ private:
   double focal;
   cv::Point2f pp;
   size_t min_points_per_frame;
-  cv::ORB *detector;
 
 public:
   WorldMap(double focal, cv::Point2f pp, size_t min_points = 500) {
     this->focal = focal;
     this->pp = pp;
     this->min_points_per_frame = min_points;
-    this->detector = cv::ORB::create();
   }
 
   bool register_new_image(cv::Mat &new_img) {
@@ -65,6 +63,7 @@ public:
     this->img_2 = new_img;
 
     auto feature_matcher = cv::BFMatcher::create();
+    auto detector = cv::ORB::create();
 
     std::vector<uchar> status;
     std::vector<float> error;
