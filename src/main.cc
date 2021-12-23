@@ -28,8 +28,7 @@ public:
 };
 
 class WorldMap {
-private:
-  std::vector<WorldPoint> world_points;
+public:
   std::vector<Frame> frames;
   cv::Mat img_1, img_2;
   std::vector<cv::Point2f> points_1;
@@ -37,12 +36,15 @@ private:
   double focal;
   cv::Point2f pp;
   size_t min_points_per_frame;
+  std::vector<cv::Mat> world_points_clouds;
 
 public:
-  WorldMap(double focal, cv::Point2f pp, size_t min_points = 500) {
+  WorldMap(double focal, cv::Point2f pp, size_t min_points,
+           std::vector<cv::Mat> &world_point_clouds_in) {
     this->focal = focal;
     this->pp = pp;
     this->min_points_per_frame = min_points;
+    this->world_points_clouds = world_point_clouds_in;
   }
 
   bool register_new_image(cv::Mat &new_img) {
@@ -72,7 +74,9 @@ public:
     std::vector<cv::KeyPoint> keypoints_2;
     cv::Mat descriptors_1;
     cv::Mat descriptors_2;
-    detector->detectAndCompute(this->img_2, cv::Mat(), keypoints_1,
+    detector->detect(this->img_1, keypoints_1, cv::Mat());
+    detector->detect(this->img_2, keypoints_2, cv::Mat());
+    detector->detectAndCompute(this->img_1, cv::Mat(), keypoints_1,
                                descriptors_1);
     detector->detectAndCompute(this->img_2, cv::Mat(), keypoints_2,
                                descriptors_2);
@@ -107,10 +111,13 @@ public:
     std::cout << "number of points: " << points_1.size() << std::endl;
 
     cv::Mat R, t;
-    std::vector<Eigen::Vector3d> world_points;
 
     cv::Mat world_points_mat;
     triangulate_points(points_1, points_2, focal, pp, R, t, world_points_mat);
+
+    this->world_points_clouds.push_back(world_points_mat);
+
+    // cv::vconcat(this->world_points, world_points_mat, this->world_points);
 
     return true;
   }
@@ -123,22 +130,27 @@ int main(int argc, char **argv) {
   }
   cv::VideoCapture vidcap;
   vidcap.open(argv[1]);
-  // polyscope::init();
+  polyscope::init();
   std::vector<glm::vec3> points;
 
   cv::Point2f pp;
   pp.x = 0.0;
   pp.y = 0.0;
 
-  WorldMap map(700.0, pp);
+  std::vector<cv::Mat> world_point_clouds;
+  WorldMap map(700.0, pp, 2500, world_point_clouds);
   cv::Mat image, image_c;
 
   bool has_new_frames = true;
   has_new_frames = vidcap.read(image_c);
-  while (has_new_frames) {
+  cv::cvtColor(image_c, image, cv::COLOR_BGR2GRAY);
+  map.register_new_image(image);
+  size_t count = 0;
+  while (has_new_frames && count < 10) {
     cv::cvtColor(image_c, image, cv::COLOR_BGR2GRAY);
     map.register_new_image(image);
     has_new_frames = vidcap.read(image_c);
+    // count++;
   }
 
   cv::Mat world_points;
@@ -147,22 +159,30 @@ int main(int argc, char **argv) {
   // world_points);
   //  visualize!
   //
-  return 0;
   //
-  std::vector<glm::vec3> world_glm;
 
-  for (int i = 0; i < world_points.rows; i++) {
-    world_glm.push_back(glm::vec3(world_points.at<float>(i, 0),
-                                  world_points.at<float>(i, 1),
-                                  world_points.at<float>(i, 2)));
+  std::cout << "No of PCs: " << map.world_points_clouds.size() << std::endl;
+  int iii = 0;
+  for (auto point_cloud : map.world_points_clouds) {
+    std::vector<glm::vec3> world_glm;
+    iii++;
+    for (int i = 0; i < point_cloud.rows; i++) {
+      world_glm.push_back(glm::vec3(point_cloud.at<float>(i, 0),
+                                    point_cloud.at<float>(i, 1),
+                                    point_cloud.at<float>(i, 2)));
+    }
+    polyscope::PointCloud *psCloud =
+        polyscope::registerPointCloud(std::to_string(iii), world_glm);
+    psCloud->setPointRadius(0.0002);
+    psCloud->setPointRenderMode(polyscope::PointRenderMode::Quad);
   }
-
-  polyscope::PointCloud *psCloud =
-      polyscope::registerPointCloud("really great points", world_glm);
+  // for (int i = 0; i < world_points.rows; i++) // {
+  //   world_glm.push_back(glm::vec3(world_points.at<float>(i, 0),
+  //                                 world_points.at<float>(i, 1),
+  //                                 world_points.at<float>(i, 2)));
+  // }
 
   // set some options
-  psCloud->setPointRadius(0.002);
-  psCloud->setPointRenderMode(polyscope::PointRenderMode::Quad);
   polyscope::show();
   return 0;
 }
