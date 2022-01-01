@@ -1,3 +1,4 @@
+#include "polyscope/curve_network.h"
 #include "polyscope/point_cloud.h"
 #include "polyscope/polyscope.h"
 #include "triangulate.hh"
@@ -9,6 +10,8 @@
 
 // DONE create constructors
 // DONE triangulate points from image pairs
+// DONE create trajectories from CV::Mat type Rt to Eigen types
+// DONE render trajectory in Polyscope
 // TODO Create correspondences from optical flow results
 // TODO Create associated pose graph-y thing using optical flow - mask off
 // existing points when searching for new ones
@@ -37,10 +40,17 @@ public:
   cv::Point2f pp;
   size_t min_points_per_frame;
   std::vector<cv::Mat> world_points_clouds;
+  Eigen::Matrix3d Ra, R;
+  Eigen::Vector3d ta, t;
+  std::vector<Eigen::Vector3d> traj_points;
 
 public:
   WorldMap(double focal, cv::Point2f pp, size_t min_points,
            std::vector<cv::Mat> &world_point_clouds_in) {
+    Ra = Eigen::Matrix3d::Identity();
+    R = Eigen::Matrix3d::Identity();
+    t = Eigen::Vector3d::Zero();
+    ta = Eigen::Vector3d::Zero();
     this->focal = focal;
     this->pp = pp;
     this->min_points_per_frame = min_points;
@@ -110,14 +120,22 @@ public:
 
     std::cout << "number of points: " << points_1.size() << std::endl;
 
-    cv::Mat R, t;
-
     cv::Mat world_points_mat;
-    triangulate_points(points_1, points_2, focal, pp, R, t, world_points_mat);
+    cv::Mat R_mat, t_mat;
+    triangulate_points(points_1, points_2, focal, pp, R_mat, t_mat,
+                       world_points_mat);
 
     this->world_points_clouds.push_back(world_points_mat);
 
-    // cv::vconcat(this->world_points, world_points_mat, this->world_points);
+    R << R_mat.at<float>(0, 0), R_mat.at<float>(0, 1), R_mat.at<float>(0, 2),
+        R_mat.at<float>(1, 0), R_mat.at<float>(1, 1), R_mat.at<float>(1, 2),
+        R_mat.at<float>(2, 0), R_mat.at<float>(2, 1), R_mat.at<float>(2, 2);
+    t << t_mat.at<float>(0), t_mat.at<float>(1), t_mat.at<float>(2);
+    // cv::cv2eigen(t_mat, t);
+    ta = ta + R * t;
+    Ra = R * (Ra);
+
+    traj_points.push_back(ta);
 
     return true;
   }
@@ -146,11 +164,11 @@ int main(int argc, char **argv) {
   cv::cvtColor(image_c, image, cv::COLOR_BGR2GRAY);
   map.register_new_image(image);
   size_t count = 0;
-  while (has_new_frames && count < 10) {
+  while (has_new_frames && count < 80) {
     cv::cvtColor(image_c, image, cv::COLOR_BGR2GRAY);
     map.register_new_image(image);
     has_new_frames = vidcap.read(image_c);
-    // count++;
+    count++;
   }
 
   cv::Mat world_points;
@@ -171,11 +189,12 @@ int main(int argc, char **argv) {
                                     point_cloud.at<float>(i, 1),
                                     point_cloud.at<float>(i, 2)));
     }
-    polyscope::PointCloud *psCloud =
-        polyscope::registerPointCloud(std::to_string(iii), world_glm);
-    psCloud->setPointRadius(0.0002);
-    psCloud->setPointRenderMode(polyscope::PointRenderMode::Quad);
+    // polyscope::PointCloud *psCloud =
+    //     polyscope::registerPointCloud(std::to_string(iii), world_glm);
+    // psCloud->setPointRadius(0.0002);
+    // psCloud->setPointRenderMode(polyscope::PointRenderMode::Quad);
   }
+  auto _ = polyscope::registerCurveNetworkLine("trajectory", map.traj_points);
   // for (int i = 0; i < world_points.rows; i++) // {
   //   world_glm.push_back(glm::vec3(world_points.at<float>(i, 0),
   //                                 world_points.at<float>(i, 1),
