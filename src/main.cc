@@ -12,6 +12,10 @@
 // DONE triangulate points from image pairs
 // DONE create trajectories from CV::Mat type Rt to Eigen types
 // DONE render trajectory in Polyscope
+// TODO Check results from triangulation
+//    TODO write a PCD writer
+//    TODO write point cloud to disk
+//    TODO read point cloud in pptk
 // TODO Create correspondences from optical flow results
 // TODO Create associated pose graph-y thing using optical flow - mask off
 // existing points when searching for new ones
@@ -20,6 +24,16 @@
 
 typedef Eigen::Vector3f WorldPoint;
 typedef Eigen::Vector2f ImagePoint;
+
+void draw_kps(cv::Mat &image, std::vector<cv::Point2f> p0,
+              std::vector<cv::Point2f> p1) {
+  for (size_t idx = 0; idx < p0.size(); idx++) {
+    cv::circle(image, p0[idx], 1, cv::Scalar(0, 0, 225), cv::FILLED,
+               cv::LINE_8);
+    cv::circle(image, p1[idx], 1, cv::Scalar(255, 0, 0), cv::FILLED,
+               cv::LINE_8);
+  }
+}
 
 class Frame {
 public:
@@ -43,6 +57,7 @@ public:
   Eigen::Matrix3d Ra, R;
   Eigen::Vector3d ta, t;
   std::vector<Eigen::Vector3d> traj_points;
+  cv::Mat draw_img;
 
 public:
   WorldMap(double focal, cv::Point2f pp, size_t min_points,
@@ -63,7 +78,7 @@ public:
       Frame frame_1;
       frame_1.image = new_img;
       this->frames.push_back(frame_1);
-      this->img_1 = new_img;
+      this->img_1 = new_img.clone();
 
       return true;
     }
@@ -71,11 +86,10 @@ public:
     Frame frame_2;
     frame_2.image = new_img;
     this->frames.push_back(frame_2);
-    this->img_2 = new_img;
-    this->img_2 = new_img;
+    this->img_2 = new_img.clone();
 
     auto feature_matcher = cv::BFMatcher::create();
-    auto detector = cv::ORB::create();
+    auto detector = cv::ORB::create(500);
 
     std::vector<uchar> status;
     std::vector<float> error;
@@ -105,7 +119,13 @@ public:
     }
 
     std::cout << "Pushed frame: " << this->frames.size() << ", ";
-    this->img_1 = img_2;
+    cv::cvtColor(img_1, draw_img, cv::COLOR_GRAY2BGR);
+    // draw_kps(draw_img, points_1, points_2);
+    cv::imshow("kps_1", draw_img);
+    cv::cvtColor(img_2, draw_img, cv::COLOR_GRAY2BGR);
+    // draw_kps(draw_img, points_1, points_2);
+    cv::imshow("kps_2", draw_img);
+    cv::waitKey(1);
 
     size_t i, k;
     for (i = k = 0; i < this->points_1.size(); i++) {
@@ -118,24 +138,31 @@ public:
     this->points_1.resize(k);
     this->points_2.resize(k);
 
-    std::cout << "number of points: " << points_1.size() << std::endl;
+    this->img_1 = img_2;
+    // return true;
+    // std::cout << "number of points: " << points_1.size() << std::endl;
 
     cv::Mat world_points_mat;
     cv::Mat R_mat, t_mat;
     triangulate_points(points_1, points_2, focal, pp, R_mat, t_mat,
                        world_points_mat);
 
-    this->world_points_clouds.push_back(world_points_mat);
+    this->world_points_clouds.push_back(world_points_mat * 100.0);
 
-    R << R_mat.at<float>(0, 0), R_mat.at<float>(0, 1), R_mat.at<float>(0, 2),
-        R_mat.at<float>(1, 0), R_mat.at<float>(1, 1), R_mat.at<float>(1, 2),
-        R_mat.at<float>(2, 0), R_mat.at<float>(2, 1), R_mat.at<float>(2, 2);
-    t << t_mat.at<float>(0), t_mat.at<float>(1), t_mat.at<float>(2);
+    R << R_mat.at<double>(0, 0), R_mat.at<double>(0, 1), R_mat.at<double>(0, 2),
+        R_mat.at<double>(1, 0), R_mat.at<double>(1, 1), R_mat.at<double>(1, 2),
+        R_mat.at<double>(2, 0), R_mat.at<double>(2, 1), R_mat.at<double>(2, 2);
+    t << t_mat.at<double>(0), t_mat.at<double>(1), t_mat.at<double>(2);
     // cv::cv2eigen(t_mat, t);
-    ta = ta + R * t;
+    ta = ta + Ra * t;
     Ra = R * (Ra);
 
-    traj_points.push_back(ta);
+    std::cout << "Trajectory: " << std::endl << ta << std::endl;
+    std::cout << "Rotation: " << std::endl << R_mat << std::endl;
+    std::cout << "Rotation: " << std::endl << R << std::endl;
+    // std::cout << "Rotation: " << std::endl << Ra << std::endl;
+
+    traj_points.push_back(ta * 1000);
 
     return true;
   }
@@ -165,9 +192,9 @@ int main(int argc, char **argv) {
   map.register_new_image(image);
   size_t count = 0;
   while (has_new_frames && count < 80) {
+    has_new_frames = vidcap.read(image_c);
     cv::cvtColor(image_c, image, cv::COLOR_BGR2GRAY);
     map.register_new_image(image);
-    has_new_frames = vidcap.read(image_c);
     count++;
   }
 
@@ -179,7 +206,7 @@ int main(int argc, char **argv) {
   //
   //
 
-  std::cout << "No of PCs: " << map.world_points_clouds.size() << std::endl;
+  // std::cout << "No of PCs: " << map.world_points_clouds.size() << std::endl;
   int iii = 0;
   for (auto point_cloud : map.world_points_clouds) {
     std::vector<glm::vec3> world_glm;
@@ -189,10 +216,10 @@ int main(int argc, char **argv) {
                                     point_cloud.at<float>(i, 1),
                                     point_cloud.at<float>(i, 2)));
     }
-    // polyscope::PointCloud *psCloud =
-    //     polyscope::registerPointCloud(std::to_string(iii), world_glm);
-    // psCloud->setPointRadius(0.0002);
-    // psCloud->setPointRenderMode(polyscope::PointRenderMode::Quad);
+    polyscope::PointCloud *psCloud =
+        polyscope::registerPointCloud(std::to_string(iii), world_glm);
+    psCloud->setPointRadius(0.0002);
+    psCloud->setPointRenderMode(polyscope::PointRenderMode::Quad);
   }
   auto _ = polyscope::registerCurveNetworkLine("trajectory", map.traj_points);
   // for (int i = 0; i < world_points.rows; i++) // {
