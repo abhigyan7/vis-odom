@@ -138,7 +138,7 @@ public:
     std::cout << "Rotation: " << std::endl << R << std::endl;
     // std::cout << "Rotation: " << std::endl << Ra << std::endl;
 
-    traj_points.push_back(ta * 1000);
+    traj_points.push_back(ta);
 
     return true;
   }

@@ -21,7 +21,7 @@
 // DONE triangulate points from image pairs
 // DONE create trajectories from CV::Mat type Rt to Eigen types
 // DONE render trajectory in Polyscope
-// TODO switch to pangolin
+// DONE switch to pangolin
 // TODO Check results from triangulation
 //    TODO write a PCD writer
 //    TODO write point cloud to disk
@@ -71,22 +71,20 @@ int main(int argc, char **argv) {
   bool has_new_frames = true;
   has_new_frames = vidcap.read(image_c);
   cv::cvtColor(image_c, image, cv::COLOR_BGR2GRAY);
-  map.register_new_image(image);
   size_t count = 0;
-  while (has_new_frames && count < 80) {
-    has_new_frames = vidcap.read(image_c);
+  while (has_new_frames && count < 10000) {
     cv::cvtColor(image_c, image, cv::COLOR_BGR2GRAY);
     map.register_new_image(image);
     count++;
+    has_new_frames = vidcap.read(image_c);
   }
 
   cv::Mat world_points;
   cv::Mat R, t;
+  std::vector<Eigen::Vector3f> world_points_eigen;
   // triangulate_points(image_1, image_2, points_1, 700.0, pp, R, t,
   // world_points);
   //  visualize!
-  //
-  //
 
   // std::cout << "No of PCs: " << map.world_points_clouds.size() << std::endl;
   int iii = 0;
@@ -97,14 +95,26 @@ int main(int argc, char **argv) {
       world_glm.push_back(glm::vec3(point_cloud.at<float>(i, 0),
                                     point_cloud.at<float>(i, 1),
                                     point_cloud.at<float>(i, 2)));
+      world_points_eigen.push_back(Eigen::Vector3f(
+          point_cloud.at<float>(i, 0), point_cloud.at<float>(i, 1),
+          point_cloud.at<float>(i, 2)));
     }
   }
-  // for (int i = 0; i < world_points.rows; i++) // {
-  //   world_glm.push_back(glm::vec3(world_points.at<float>(i, 0),
-  //                                 world_points.at<float>(i, 1),
-  //                                 world_points.at<float>(i, 2)));
-  // }
 
-  // set some options
+  std::cout << "Visualizing " << world_points_eigen.size() << " points."
+            << std::endl;
+
+  while (!pangolin::ShouldQuit()) {
+    // Clear the screen and activate view to render into
+    glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
+    glColor3f(1.0, 1.0, 1.0);
+    Eigen::Vector3d one, two;
+    glColor3f(1.0, 0.0, 0.0);
+    draw_cameras_from_trajectory(map.traj_points, map.focal,
+                                 map.pp.y / map.pp.x, 10.0);
+    d_cam.Activate(s_cam);
+    pangolin::FinishFrame();
+  }
+
   return 0;
 }
