@@ -14,6 +14,7 @@
 #include <pangolin/scene/axis.h>
 #include <pangolin/scene/scenehandler.h>
 
+#include <cstring>
 #include <map.hh>
 #include <utils.hh>
 
@@ -22,47 +23,59 @@
 // DONE create trajectories from CV::Mat type Rt to Eigen types
 // DONE render trajectory in Polyscope
 // DONE switch to pangolin
-// TODO Check results from triangulation
-//    TODO write a PCD writer
-//    TODO write point cloud to disk
-//    TODO read point cloud in pptk
+// TODO abstract away pangolin boilerplate
 // TODO Create correspondences from optical flow results
 // TODO Create associated pose graph-y thing using optical flow - mask off
 // existing points when searching for new ones
 // TODO build pose graph from triangulated data
 // TODO encapsulate triangulation state into a class
 
+class PangolinRenderer {
+public:
+  pangolin::View d_cam;
+  pangolin::OpenGlRenderState s_cam;
+  PangolinRenderer() {
+    pangolin::CreateWindowAndBind("Main", 640, 480);
+    glEnable(GL_DEPTH_TEST);
+
+    pangolin::OpenGlRenderState s_cam(
+        pangolin::ProjectionMatrix(640, 480, 420, 420, 320, 240, 0.1, 1000),
+        pangolin::ModelViewLookAt(0, 0.5, -3, 0, 0, 0, pangolin::AxisY));
+
+    pangolin::Renderable tree;
+    for (size_t i = 0; i < 10; ++i) {
+      auto axis_i = std::make_shared<pangolin::Axis>();
+      axis_i->T_pc = pangolin::OpenGlMatrix::Translate(i * 2.0, i * 0.1, 0.0);
+      tree.Add(axis_i);
+    }
+    pangolin::SceneHandler handler(tree, s_cam);
+    d_cam = pangolin::CreateDisplay().SetHandler(&handler);
+  }
+  bool shouldQuit() { return pangolin::ShouldQuit(); }
+
+  void finalize_frame() {
+    d_cam.Activate(s_cam);
+    pangolin::FinishFrame();
+  }
+};
+
 typedef Eigen::Vector3f WorldPoint;
 typedef Eigen::Vector2f ImagePoint;
 
 int main(int argc, char **argv) {
-  if (argc != 2) {
+  if (argc != 3) {
     printf("usage: main <video-file>.mp4\n");
     return -1;
   }
   cv::VideoCapture vidcap;
   vidcap.open(argv[1]);
+  int max_count = std::stoi(argv[2]);
+
   std::vector<glm::vec3> points;
 
   cv::Point2f pp;
   pp.x = 0.0;
   pp.y = 0.0;
-
-  pangolin::CreateWindowAndBind("Main", 640, 480);
-  glEnable(GL_DEPTH_TEST);
-
-  pangolin::OpenGlRenderState s_cam(
-      pangolin::ProjectionMatrix(640, 480, 420, 420, 320, 240, 0.1, 1000),
-      pangolin::ModelViewLookAt(0, 0.5, -3, 0, 0, 0, pangolin::AxisY));
-
-  pangolin::Renderable tree;
-  for (size_t i = 0; i < 10; ++i) {
-    auto axis_i = std::make_shared<pangolin::Axis>();
-    axis_i->T_pc = pangolin::OpenGlMatrix::Translate(i * 2.0, i * 0.1, 0.0);
-    tree.Add(axis_i);
-  }
-  pangolin::SceneHandler handler(tree, s_cam);
-  pangolin::View &d_cam = pangolin::CreateDisplay().SetHandler(&handler);
 
   std::vector<cv::Mat> world_point_clouds;
   WorldMap map(700.0, pp, 2500, world_point_clouds);
@@ -72,7 +85,7 @@ int main(int argc, char **argv) {
   has_new_frames = vidcap.read(image_c);
   cv::cvtColor(image_c, image, cv::COLOR_BGR2GRAY);
   size_t count = 0;
-  while (has_new_frames && count < 10000) {
+  while (has_new_frames && count < max_count) {
     cv::cvtColor(image_c, image, cv::COLOR_BGR2GRAY);
     map.register_new_image(image);
     count++;
@@ -103,17 +116,19 @@ int main(int argc, char **argv) {
 
   std::cout << "Visualizing " << world_points_eigen.size() << " points."
             << std::endl;
+  std::cout << "Trajectory Size: " << map.traj_points.size() << std::endl;
 
-  while (!pangolin::ShouldQuit()) {
+  PangolinRenderer pango_renderer;
+
+  while (!pango_renderer.shouldQuit()) {
     // Clear the screen and activate view to render into
     glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
     glColor3f(1.0, 1.0, 1.0);
     Eigen::Vector3d one, two;
     glColor3f(1.0, 0.0, 0.0);
-    draw_cameras_from_trajectory(map.traj_points, map.focal,
+    draw_cameras_from_trajectory(map.traj_points, map.traj_rotations, map.focal,
                                  map.pp.y / map.pp.x, 10.0);
-    d_cam.Activate(s_cam);
-    pangolin::FinishFrame();
+    pango_renderer.finalize_frame();
   }
 
   return 0;

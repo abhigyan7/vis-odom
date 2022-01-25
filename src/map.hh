@@ -33,6 +33,7 @@ public:
   Eigen::Matrix3d Ra, R;
   Eigen::Vector3d ta, t;
   std::vector<Eigen::Vector3d> traj_points;
+  std::vector<Eigen::Matrix3d> traj_rotations;
   cv::Mat draw_img;
 
 public:
@@ -139,6 +140,7 @@ public:
     // std::cout << "Rotation: " << std::endl << Ra << std::endl;
 
     traj_points.push_back(ta);
+    traj_rotations.push_back(Ra);
 
     return true;
   }
