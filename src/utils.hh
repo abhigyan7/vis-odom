@@ -122,4 +122,33 @@ void draw_kps(cv::Mat &image, std::vector<cv::Point2f> p0,
   }
 }
 
+class PangolinRenderer {
+public:
+  pangolin::View d_cam;
+  pangolin::OpenGlRenderState s_cam;
+  PangolinRenderer() {
+    pangolin::CreateWindowAndBind("Main", 640, 480);
+    glEnable(GL_DEPTH_TEST);
+
+    pangolin::OpenGlRenderState s_cam(
+        pangolin::ProjectionMatrix(640, 480, 420, 420, 320, 240, 0.1, 1000),
+        pangolin::ModelViewLookAt(0, 0.5, -3, 0, 0, 0, pangolin::AxisY));
+
+    pangolin::Renderable tree;
+    for (size_t i = 0; i < 10; ++i) {
+      auto axis_i = std::make_shared<pangolin::Axis>();
+      axis_i->T_pc = pangolin::OpenGlMatrix::Translate(i * 2.0, i * 0.1, 0.0);
+      tree.Add(axis_i);
+    }
+    pangolin::SceneHandler handler(tree, s_cam);
+    d_cam = pangolin::CreateDisplay().SetHandler(&handler);
+  }
+  bool shouldQuit() { return pangolin::ShouldQuit(); }
+
+  void finalize_frame() {
+    d_cam.Activate(s_cam);
+    pangolin::FinishFrame();
+  }
+};
+
 #endif // UTILS_H_

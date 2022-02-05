@@ -23,41 +23,12 @@
 // DONE create trajectories from CV::Mat type Rt to Eigen types
 // DONE render trajectory in Polyscope
 // DONE switch to pangolin
-// TODO abstract away pangolin boilerplate
+// DONE abstract away pangolin boilerplate
 // TODO Create correspondences from optical flow results
 // TODO Create associated pose graph-y thing using optical flow - mask off
 // existing points when searching for new ones
 // TODO build pose graph from triangulated data
 // TODO encapsulate triangulation state into a class
-
-class PangolinRenderer {
-public:
-  pangolin::View d_cam;
-  pangolin::OpenGlRenderState s_cam;
-  PangolinRenderer() {
-    pangolin::CreateWindowAndBind("Main", 640, 480);
-    glEnable(GL_DEPTH_TEST);
-
-    pangolin::OpenGlRenderState s_cam(
-        pangolin::ProjectionMatrix(640, 480, 420, 420, 320, 240, 0.1, 1000),
-        pangolin::ModelViewLookAt(0, 0.5, -3, 0, 0, 0, pangolin::AxisY));
-
-    pangolin::Renderable tree;
-    for (size_t i = 0; i < 10; ++i) {
-      auto axis_i = std::make_shared<pangolin::Axis>();
-      axis_i->T_pc = pangolin::OpenGlMatrix::Translate(i * 2.0, i * 0.1, 0.0);
-      tree.Add(axis_i);
-    }
-    pangolin::SceneHandler handler(tree, s_cam);
-    d_cam = pangolin::CreateDisplay().SetHandler(&handler);
-  }
-  bool shouldQuit() { return pangolin::ShouldQuit(); }
-
-  void finalize_frame() {
-    d_cam.Activate(s_cam);
-    pangolin::FinishFrame();
-  }
-};
 
 typedef Eigen::Vector3f WorldPoint;
 typedef Eigen::Vector2f ImagePoint;
