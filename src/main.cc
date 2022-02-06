@@ -24,6 +24,7 @@
 // DONE render trajectory in Polyscope
 // DONE switch to pangolin
 // DONE abstract away pangolin boilerplate
+// DONE switch back to imperative pangolin
 // TODO Create correspondences from optical flow results
 // TODO Create associated pose graph-y thing using optical flow - mask off
 // existing points when searching for new ones
@@ -89,9 +90,22 @@ int main(int argc, char **argv) {
             << std::endl;
   std::cout << "Trajectory Size: " << map.traj_points.size() << std::endl;
 
-  PangolinRenderer pango_renderer;
+  pangolin::CreateWindowAndBind("Renderer", 640, 480);
+  glEnable(GL_DEPTH_TEST);
 
-  while (!pango_renderer.shouldQuit()) {
+  pangolin::OpenGlRenderState s_cam(
+      pangolin::ProjectionMatrix(640, 480, 420, 420, 320, 240, 0.1, 1000),
+      pangolin::ModelViewLookAt(0, 0.5, -3, 0, 0, 0, pangolin::AxisY));
+  pangolin::Renderable tree;
+  for (size_t i = 0; i < 10; ++i) {
+    auto axis_i = std::make_shared<pangolin::Axis>();
+    axis_i->T_pc = pangolin::OpenGlMatrix::Translate(i * 20, i * 0.1, 0.0);
+    tree.Add(axis_i);
+  }
+  pangolin::SceneHandler handler(tree, s_cam);
+  pangolin::View &d_cam = pangolin::CreateDisplay().SetHandler(&handler);
+
+  while (!pangolin::ShouldQuit()) {
     // Clear the screen and activate view to render into
     glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
     glColor3f(1.0, 1.0, 1.0);
@@ -99,7 +113,8 @@ int main(int argc, char **argv) {
     glColor3f(1.0, 0.0, 0.0);
     draw_cameras_from_trajectory(map.traj_points, map.traj_rotations, map.focal,
                                  map.pp.y / map.pp.x, 10.0);
-    pango_renderer.finalize_frame();
+    d_cam.Activate(s_cam);
+    pangolin::FinishFrame();
   }
 
   return 0;
