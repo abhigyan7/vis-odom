@@ -109,10 +109,14 @@ int main(int argc, char **argv) {
     // Clear the screen and activate view to render into
     glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
     glColor3f(1.0, 1.0, 1.0);
+
+    glPointSize(3);
+    pangolin::glDrawPoints(map.traj_points);
+    glPointSize(1);
     Eigen::Vector3d one, two;
     glColor3f(1.0, 0.0, 0.0);
-    draw_cameras_from_trajectory(map.traj_points, map.traj_rotations, map.focal,
-                                 map.pp.y / map.pp.x, 10.0);
+    // draw_cameras_from_trajectory(map.traj_points, map.traj_rotations,
+    // map.focal, map.pp.y / map.pp.x, 10.0);
     d_cam.Activate(s_cam);
     pangolin::FinishFrame();
   }

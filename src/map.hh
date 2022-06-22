@@ -1,6 +1,7 @@
 #ifndef MAP_H_
 #define MAP_H_
 
+#include "utils.hh"
 #include <Eigen/Eigen>
 #include <glm/glm.hpp>
 #include <iostream>
@@ -14,8 +15,10 @@ typedef Eigen::Vector2f ImagePoint;
 class Frame {
 public:
   cv::Mat image;
-  // maps point id (WorldPoint.id) to its projection in this frame
-  std::unordered_map<int, ImagePoint> projected_points;
+  // all the matched projections in this image
+  std::vector<ImagePoint> projected_points;
+  // map from index in Frame::projected_points to WorldPoint id
+  std::unordered_map<size_t, size_t> correspondences;
   Eigen::Matrix3f R;
   Eigen::Vector3f t;
 };
@@ -23,6 +26,7 @@ public:
 class WorldMap {
 public:
   std::vector<Frame> frames;
+  std::vector<WorldPoint> world_points;
   cv::Mat img_1, img_2;
   std::vector<cv::Point2f> points_1;
   std::vector<cv::Point2f> points_2;
@@ -35,6 +39,9 @@ public:
   std::vector<Eigen::Vector3d> traj_points;
   std::vector<Eigen::Matrix3d> traj_rotations;
   cv::Mat draw_img;
+  std::vector<cv::KeyPoint> keypoints_1, keypoints_2;
+  cv::Mat descriptors_1, descriptors_2;
+  std::vector<ImagePoint> imagepoints_1, imagepoints_2;
 
 public:
   WorldMap(double focal, cv::Point2f pp, size_t min_points,
@@ -50,13 +57,17 @@ public:
   }
 
   bool register_new_image(cv::Mat &new_img) {
-
+    auto feature_matcher = cv::BFMatcher::create();
+    auto detector = cv::ORB::create(2000);
     if (this->frames.size() == 0) {
       Frame frame_1;
       frame_1.image = new_img;
       this->frames.push_back(frame_1);
       this->img_1 = new_img.clone();
 
+      detector->detect(this->img_1, keypoints_1, cv::Mat());
+      detector->detectAndCompute(this->img_1, cv::Mat(), keypoints_1,
+                                 descriptors_1);
       return true;
     }
 
@@ -65,20 +76,12 @@ public:
     this->frames.push_back(frame_2);
     this->img_2 = new_img.clone();
 
-    auto feature_matcher = cv::BFMatcher::create();
-    auto detector = cv::ORB::create(500);
-
     std::vector<uchar> status;
     std::vector<float> error;
 
-    std::vector<cv::KeyPoint> keypoints_1;
-    std::vector<cv::KeyPoint> keypoints_2;
-    cv::Mat descriptors_1;
-    cv::Mat descriptors_2;
-    detector->detect(this->img_1, keypoints_1, cv::Mat());
+    detector->compute(this->img_1, keypoints_1, descriptors_1);
+
     detector->detect(this->img_2, keypoints_2, cv::Mat());
-    detector->detectAndCompute(this->img_1, cv::Mat(), keypoints_1,
-                               descriptors_1);
     detector->detectAndCompute(this->img_2, cv::Mat(), keypoints_2,
                                descriptors_2);
 
@@ -97,10 +100,10 @@ public:
 
     std::cout << "Pushed frame: " << this->frames.size() << ", ";
     cv::cvtColor(img_1, draw_img, cv::COLOR_GRAY2BGR);
-    // draw_kps(draw_img, points_1, points_2);
-    cv::imshow("kps_1", draw_img);
+    draw_kps(draw_img, points_1, points_2);
+    // cv::imshow("kps_1", draw_img);
     cv::cvtColor(img_2, draw_img, cv::COLOR_GRAY2BGR);
-    // draw_kps(draw_img, points_1, points_2);
+    draw_kps(draw_img, points_1, points_2);
     cv::imshow("kps_2", draw_img);
     cv::waitKey(1);
 
@@ -124,7 +127,7 @@ public:
     triangulate_points(points_1, points_2, focal, pp, R_mat, t_mat,
                        world_points_mat);
 
-    this->world_points_clouds.push_back(world_points_mat * 100.0);
+    this->world_points_clouds.push_back(world_points_mat);
 
     R << R_mat.at<double>(0, 0), R_mat.at<double>(0, 1), R_mat.at<double>(0, 2),
         R_mat.at<double>(1, 0), R_mat.at<double>(1, 1), R_mat.at<double>(1, 2),
