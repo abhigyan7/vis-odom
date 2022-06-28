@@ -46,6 +46,7 @@ public:
   std::vector<cv::KeyPoint> keypoints_new, keypoints_old;
   cv::Mat descriptors_new, descriptors_old;
   std::vector<ImagePoint> imagepoints_old, imagepoints_new;
+  std::vector<size_t> previous_frame_map_point_to_point_cloud;
 
 public:
   WorldMap(double focal, cv::Point2f pp, size_t min_points,
@@ -83,13 +84,9 @@ public:
     std::vector<float> error;
 
     keypoints_new.clear();
-    keypoints_old.clear();
-    this->descriptors_old.release();
     this->descriptors_new.release();
 
     // detector->detect(this->img_2, keypoints_2, cv::Mat());
-    detector->detectAndCompute(this->img_old, cv::Mat(), keypoints_old,
-                               descriptors_old);
     detector->detectAndCompute(this->img_new, cv::Mat(), keypoints_new,
                                descriptors_new);
 
@@ -144,10 +141,10 @@ public:
                                          world_points_mat.at<float>(i, 1),
                                          world_points_mat.at<float>(i, 2)) +
                     ta;
-      // if ((Ra * camera_axis).dot(ta - world_point) < 0)
-      //   continue;
-      // if ((ta - world_point).norm() > 30)
-      //   continue;
+      if ((Ra * camera_axis).dot(ta - world_point) < 0)
+        continue;
+      if ((ta - world_point).norm() > 30)
+        continue;
       this->world_points_clouds.push_back(world_point);
     }
     R << R_mat.at<double>(0, 0), R_mat.at<double>(0, 1), R_mat.at<double>(0, 2),
