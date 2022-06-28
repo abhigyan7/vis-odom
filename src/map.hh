@@ -11,6 +11,8 @@
 
 #include "triangulate.hh"
 
+#include <ceres/rotation.h>
+
 typedef Eigen::Vector3f WorldPoint;
 typedef Eigen::Vector2f ImagePoint;
 
@@ -39,6 +41,7 @@ public:
   Eigen::Vector3f ta, t;
   std::vector<Eigen::Vector3f> traj_points;
   std::vector<Eigen::Matrix3f> traj_rotations;
+  std::vector<Eigen::Vector3f> traj_rots_a;
   cv::Mat draw_img;
   std::vector<cv::KeyPoint> keypoints_new, keypoints_old;
   cv::Mat descriptors_new, descriptors_old;
@@ -154,11 +157,14 @@ public:
     ta = ta + Ra * t;
     Ra = R * (Ra);
 
-    std::cout << "Trajectory: " << std::endl << ta << std::endl;
-    std::cout << "Rotation: " << std::endl << R_mat << std::endl;
+    Eigen::Vector3f Raa;
+    ceres::RotationMatrixToAngleAxis(Ra.data(), Raa.data());
+    std::cout << "ROTATION IN ANGLE AXIS:: ";
+    std::cout << Raa << std::endl;
 
     traj_points.push_back(ta);
     traj_rotations.push_back(Ra);
+    traj_rots_a.push_back(Raa);
 
     this->keypoints_old = this->keypoints_new;
     this->descriptors_old = this->descriptors_new;
