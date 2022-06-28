@@ -125,6 +125,7 @@ int main(int argc, char **argv) {
     glColor3f(0.0, 0.0, 1.0);
     glPointSize(3);
     pangolin::glDrawPoints(map.traj_points);
+    pangolin::glDrawVertices(map.traj_points, GL_LINE_STRIP);
     glPointSize(1);
     Eigen::Vector3d one, two;
     glColor3f(1.0, 0.0, 0.0);

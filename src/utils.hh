@@ -121,6 +121,12 @@ void draw_cameras_from_trajectory(std::vector<Eigen::Vector3d> traj_points,
   }
 }
 
+template <typename T> T abs(T x) {
+  if (x < 0)
+    return -x;
+  return x;
+}
+
 void draw_kps(cv::Mat &image, std::vector<cv::Point2f> p0,
               std::vector<cv::Point2f> p1) {
   for (size_t idx = 0; idx < p0.size(); idx++) {
@@ -128,6 +134,12 @@ void draw_kps(cv::Mat &image, std::vector<cv::Point2f> p0,
                cv::LINE_8);
     cv::circle(image, p1[idx], 1, cv::Scalar(255, 0, 0), cv::FILLED,
                cv::LINE_8);
+    if (abs(p0[idx].y - p1[idx].y) > 50)
+      continue;
+    if (abs(p0[idx].x - p1[idx].x) > 50)
+      continue;
+    cv::line(image, p0[idx], p1[idx], cv::Scalar(255, 0, 0));
+    cv::line(image, p0[idx], p1[idx], cv::Scalar(255, 0, 0));
   }
 }
 
