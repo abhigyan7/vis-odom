@@ -1,7 +1,16 @@
 #ifndef UTILS_H_
 #define UTILS_H_
 
+#include <Eigen/Eigen>
+#include <glm/glm.hpp>
 #include <opencv2/opencv.hpp>
+
+#include <pangolin/display/display.h>
+#include <pangolin/display/view.h>
+#include <pangolin/gl/gl.h>
+#include <pangolin/gl/gldraw.h>
+#include <pangolin/scene/axis.h>
+#include <pangolin/scene/scenehandler.h>
 
 void mat_R_t_from_R_and_t(Eigen::Vector3d t, Eigen::Matrix3d R,
                           Eigen::Matrix4d &R_t) {

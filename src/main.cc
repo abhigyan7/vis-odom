@@ -1,5 +1,3 @@
-#include "triangulate.hh"
-
 #include <Eigen/Eigen>
 #include <glm/glm.hpp>
 #include <iostream>
@@ -15,8 +13,10 @@
 #include <pangolin/scene/scenehandler.h>
 
 #include <cstring>
-#include <map.hh>
-#include <utils.hh>
+
+#include "map.hh"
+#include "triangulate.hh"
+#include "utils.hh"
 
 // DONE create constructors
 // DONE triangulate points from image pairs
@@ -30,9 +30,23 @@
 // existing points when searching for new ones
 // TODO build pose graph from triangulated data
 // TODO encapsulate triangulation state into a class
+// DONE test for non negative dot product between viewing vector
+// and camera axis
 
 typedef Eigen::Vector3f WorldPoint;
 typedef Eigen::Vector2f ImagePoint;
+
+typedef struct {
+  Eigen::Vector3f xyz;
+  cv::Mat descriptors_1, descriptors_2;
+} World;
+
+typedef struct {
+  union {
+    float x, y;
+    float xy[2];
+  };
+} Keypoint;
 
 int main(int argc, char **argv) {
   if (argc != 3) {
@@ -41,7 +55,7 @@ int main(int argc, char **argv) {
   }
   cv::VideoCapture vidcap;
   vidcap.open(argv[1]);
-  int max_count = std::stoi(argv[2]);
+  size_t max_count = std::stoi(argv[2]);
 
   std::vector<glm::vec3> points;
 
@@ -49,7 +63,7 @@ int main(int argc, char **argv) {
   pp.x = 0.0;
   pp.y = 0.0;
 
-  std::vector<cv::Mat> world_point_clouds;
+  std::vector<Eigen::Vector3f> world_point_clouds;
   WorldMap map(700.0, pp, 2500, world_point_clouds);
   cv::Mat image, image_c;
 
@@ -62,33 +76,29 @@ int main(int argc, char **argv) {
     map.register_new_image(image);
     count++;
     has_new_frames = vidcap.read(image_c);
+    has_new_frames = vidcap.read(image_c);
   }
 
   cv::Mat world_points;
   cv::Mat R, t;
-  std::vector<Eigen::Vector3f> world_points_eigen;
-  // triangulate_points(image_1, image_2, points_1, 700.0, pp, R, t,
-  // world_points);
-  //  visualize!
 
-  // std::cout << "No of PCs: " << map.world_points_clouds.size() << std::endl;
-  int iii = 0;
-  for (auto point_cloud : map.world_points_clouds) {
-    std::vector<glm::vec3> world_glm;
-    iii++;
-    for (int i = 0; i < point_cloud.rows; i++) {
-      world_glm.push_back(glm::vec3(point_cloud.at<float>(i, 0),
-                                    point_cloud.at<float>(i, 1),
-                                    point_cloud.at<float>(i, 2)));
-      world_points_eigen.push_back(Eigen::Vector3f(
-          point_cloud.at<float>(i, 0), point_cloud.at<float>(i, 1),
-          point_cloud.at<float>(i, 2)));
-    }
-  }
-
-  std::cout << "Visualizing " << world_points_eigen.size() << " points."
+  std::cout << "Visualizing " << map.world_points_clouds.size() << " points."
             << std::endl;
   std::cout << "Trajectory Size: " << map.traj_points.size() << std::endl;
+
+  std::cout << map.world_points_clouds[0] << std::endl;
+  std::cout << map.world_points_clouds[1] << std::endl;
+  std::cout << map.world_points_clouds[2] << std::endl;
+  std::cout << map.world_points_clouds[3] << std::endl;
+  std::cout << map.world_points_clouds[4] << std::endl;
+
+  std::cout << std::endl << std::endl;
+
+  std::cout << map.traj_points[0] << std::endl;
+  std::cout << map.traj_points[1] << std::endl;
+  std::cout << map.traj_points[2] << std::endl;
+  std::cout << map.traj_points[3] << std::endl;
+  std::cout << map.traj_points[4] << std::endl;
 
   pangolin::CreateWindowAndBind("Renderer", 640, 480);
   glEnable(GL_DEPTH_TEST);
@@ -110,6 +120,9 @@ int main(int argc, char **argv) {
     glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
     glColor3f(1.0, 1.0, 1.0);
 
+    glPointSize(1);
+    pangolin::glDrawPoints(map.world_points_clouds);
+    glColor3f(0.0, 0.0, 1.0);
     glPointSize(3);
     pangolin::glDrawPoints(map.traj_points);
     glPointSize(1);

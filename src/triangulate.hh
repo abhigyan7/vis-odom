@@ -33,7 +33,7 @@ void triangulate_points(std::vector<cv::Point2f> points_1,
   std::cout << "Size of points after filter: " << s << std::endl;
   // recoverPose
   mask.clear();
-  cv::recoverPose(essential_matrix, points_2, points_1, R, t, focal, pp, mask);
+  cv::recoverPose(essential_matrix, points_1, points_2, R, t, focal, pp, mask);
   // std::cout << "Pose: " << R << "    " << t << std::endl;
   filter_using_mask(points_1, mask);
   // std::cout << mask << std::endl;
