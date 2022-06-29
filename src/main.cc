@@ -71,16 +71,13 @@ int main(int argc, char **argv) {
   has_new_frames = vidcap.read(image_c);
   cv::cvtColor(image_c, image, cv::COLOR_BGR2GRAY);
   size_t count = 0;
-  while (has_new_frames && count < max_count) {
+  while (has_new_frames && (count < max_count)) {
     cv::cvtColor(image_c, image, cv::COLOR_BGR2GRAY);
     map.register_new_image(image);
     count++;
     has_new_frames = vidcap.read(image_c);
     has_new_frames = vidcap.read(image_c);
   }
-
-  cv::Mat world_points;
-  cv::Mat R, t;
 
   std::cout << "Visualizing " << map.world_points_clouds.size() << " points."
             << std::endl;

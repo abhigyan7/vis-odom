@@ -17,8 +17,8 @@ int filter_using_mask(std::vector<cv::Point2f> &in_vector,
   return k;
 }
 
-void triangulate_points(std::vector<cv::Point2f> points_1,
-                        std::vector<cv::Point2f> points_2, double focal,
+void triangulate_points(std::vector<cv::Point2f> &points_1,
+                        std::vector<cv::Point2f> &points_2, double focal,
                         cv::Point2d pp, cv::Mat &R, cv::Mat &t,
                         cv::Mat &world_points) {
 

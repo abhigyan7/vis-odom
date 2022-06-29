@@ -27,26 +27,38 @@ public:
   Eigen::Vector3f t;
 };
 
+uint32_t hash_keypoint(float u, float v) {
+  uint16_t iu = (int)u;
+  uint16_t iv = (int)v;
+
+  return (((uint32_t)iu) << 16) + (uint32_t)iv;
+}
+
 class WorldMap {
 public:
   std::vector<Frame> frames;
-  std::vector<WorldPoint> world_points;
   cv::Mat img_old, img_new;
   std::vector<cv::Point2f> points_old, points_new;
   double focal;
   cv::Point2f pp;
   size_t min_points_per_frame;
-  std::vector<Eigen::Vector3f> world_points_clouds;
+  std::vector<WorldPoint> world_points_clouds;
   Eigen::Matrix3f Ra, R;
   Eigen::Vector3f ta, t;
-  std::vector<Eigen::Vector3f> traj_points;
+  std::vector<WorldPoint> traj_points;
   std::vector<Eigen::Matrix3f> traj_rotations;
   std::vector<Eigen::Vector3f> traj_rots_a;
   cv::Mat draw_img;
   std::vector<cv::KeyPoint> keypoints_new, keypoints_old;
   cv::Mat descriptors_new, descriptors_old;
   std::vector<ImagePoint> imagepoints_old, imagepoints_new;
-  std::vector<size_t> previous_frame_map_point_to_point_cloud;
+  std::vector<WorldPoint> world_points;
+
+  std::vector<Eigen::Vector2f> image_points;
+  std::vector<Eigen::Vector3f> world_points_ba;
+  std::map<uint32_t, size_t> keypoint_pt_to_world_point_index;
+
+  std::vector<std::tuple<size_t, size_t, size_t>> ba_problem;
 
 public:
   WorldMap(double focal, cv::Point2f pp, size_t min_points,
@@ -92,12 +104,14 @@ public:
 
     std::vector<cv::DMatch> matches;
     feature_matcher->match(descriptors_new, descriptors_old, matches);
-
     std::cout << "Matched " << matches.size() << " points" << std::endl;
 
     std::vector<cv::Point2f> temp_points_old, temp_points_new;
     cv::KeyPoint::convert(keypoints_old, temp_points_old);
     cv::KeyPoint::convert(keypoints_new, temp_points_new);
+
+    std::cout << "KEYPOINT" << temp_points_old[0] << temp_points_new[1]
+              << std::endl;
 
     points_old.clear();
     points_new.clear();
@@ -133,6 +147,9 @@ public:
 
     std::cout << "Triangulated" << world_points_mat.size() << " points"
               << std::endl;
+    std::cout << "Points new, old: " << points_new.size() << "points"
+              << std::endl;
+
     Eigen::Vector3f world_point;
     Eigen::Vector3f camera_axis;
     camera_axis << 0, 0, -1;
@@ -146,7 +163,9 @@ public:
       if ((ta - world_point).norm() > 30)
         continue;
       this->world_points_clouds.push_back(world_point);
+      this->world_points.push_back(world_point);
     }
+
     R << R_mat.at<double>(0, 0), R_mat.at<double>(0, 1), R_mat.at<double>(0, 2),
         R_mat.at<double>(1, 0), R_mat.at<double>(1, 1), R_mat.at<double>(1, 2),
         R_mat.at<double>(2, 0), R_mat.at<double>(2, 1), R_mat.at<double>(2, 2);
@@ -163,9 +182,21 @@ public:
     traj_rotations.push_back(Ra);
     traj_rots_a.push_back(Raa);
 
+    // for (size_t i = 0; i < matches.size(); i++) {
+    //   auto match = matches[i];
+
+    //   world_point_descriptors[match.trainIdx];
+    // }
+
     this->keypoints_old = this->keypoints_new;
     this->descriptors_old = this->descriptors_new;
     this->img_old = this->img_new;
+
+    size_t world_points_ba_size_so_far = this->world_points_ba.size();
+    for (int i = 0; i < world_points_mat.rows; i++) {
+      ;
+      ;
+    }
 
     return true;
   }
