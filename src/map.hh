@@ -34,6 +34,10 @@ uint32_t hash_keypoint(float u, float v) {
   return (((uint32_t)iu) << 16) + (uint32_t)iv;
 }
 
+uint32_t hash_keypoint(cv::KeyPoint kp) {
+  return hash_keypoint(kp.pt.x, kp.pt.y);
+}
+
 class WorldMap {
 public:
   std::vector<Frame> frames;
@@ -58,7 +62,8 @@ public:
   std::vector<Eigen::Vector3f> world_points_ba;
   std::map<uint32_t, size_t> keypoint_pt_to_world_point_index;
 
-  std::vector<std::tuple<size_t, size_t, size_t>> ba_problem;
+  // world points, image points, pose indices
+  std::vector<std::tuple<size_t, float, float, size_t>> ba_problem;
 
 public:
   WorldMap(double focal, cv::Point2f pp, size_t min_points,
@@ -192,12 +197,25 @@ public:
     this->descriptors_old = this->descriptors_new;
     this->img_old = this->img_new;
 
+    for (int i = 0; i < world_points_mat.rows; i++) {
+      if (this->keypoint_pt_to_world_point_index.count(
+              hash_keypoint(this->keypoints_old[i]))) {
+        // todo fix whatever this is
+        this->ba_problem.push_back({this->keypoint_pt_to_world_point_index[i],
+                                    0, 0, this->traj_rots_a.size() - 1});
+      }
+    }
     size_t world_points_ba_size_so_far = this->world_points_ba.size();
     for (int i = 0; i < world_points_mat.rows; i++) {
-      ;
-      ;
+      this->keypoint_pt_to_world_point_index[hash_keypoint(
+          this->keypoints_old[i])] = world_points_ba_size_so_far;
+      this->world_points_ba.push_back(this->world_points_clouds[i]);
+      world_points_ba_size_so_far++;
     }
 
+    this->keypoint_pt_to_world_point_index.clear();
+    for (int i = 0; i < world_points_mat.rows; i++) {
+    }
     return true;
   }
 };
