@@ -11,6 +11,7 @@
 
 #include "triangulate.hh"
 
+#include <ceres/ceres.h>
 #include <ceres/rotation.h>
 
 typedef Eigen::Vector3f WorldPoint;
@@ -217,12 +218,12 @@ public:
       if (this->keypoint_pt_to_world_point_index.count(
               hash_point2f(this->points_old[i]))) {
         found++;
-        std::cout << "Found match" << std::endl;
         this->ba_problem.push_back(
-            {this->keypoint_pt_to_world_point_index[i], // takes i to a world
-                                                        // point
-             this->points_new[i].x, // where the projection was found
-             this->points_new[i].y, // same but y
+            {this->keypoint_pt_to_world_point_index[hash_point2f(
+                 this->points_old[i])], // takes i to a world
+                                        // point
+             this->points_new[i].x,     // where the projection was found
+             this->points_new[i].y,     // same but y
              this->traj_rots_a.size() -
                  1}); // index to traj_rots_a and traj_points
         old_associative_index[hash_keypoint(this->keypoints_new[i])] =
@@ -242,16 +243,70 @@ public:
 
     this->keypoint_pt_to_world_point_index = old_associative_index;
 
-    size_t world_points_ba_size_so_far = this->world_points_ba.size();
-    for (int i = 0; i < world_points_mat.rows; i++) {
-      this->keypoint_pt_to_world_point_index[hash_keypoint(
-          this->keypoints_old[i])] = world_points_ba_size_so_far;
-      this->world_points_ba.push_back(this->world_points_clouds[i]);
-      world_points_ba_size_so_far++;
-    }
-
     return true;
   }
 };
+
+struct SnavelyReprojectionError {
+  SnavelyReprojectionError(float observed_x, float observed_y)
+      : observed_x(observed_x), observed_y(observed_y) {}
+
+  template <typename T>
+  bool operator()(const T *const camera_r, const T *const camera_t,
+                  const T *const f, const T *const point, T *residuals) const {
+    T p[3];
+    ceres::AngleAxisRotatePoint(camera_r, point, p);
+
+    p[0] += camera_t[3];
+    p[1] += camera_t[4];
+    p[2] += camera_t[5];
+
+    T xp = p[0] / p[2];
+    T yp = p[1] / p[2];
+
+    T predicted_x = f * xp;
+    T predicted_y = f * yp;
+
+    residuals[0] = predicted_x - observed_x;
+    residuals[1] = predicted_y - observed_y;
+    return true;
+  }
+
+  static ceres::CostFunction *Create(const float observed_x,
+                                     const float observed_y) {
+    return (new ceres::AutoDiffCostFunction<SnavelyReprojectionError, 2, 3, 3,
+                                            1, 3>(
+        new SnavelyReprojectionError(observed_x, observed_y)));
+  }
+  double observed_x, observed_y;
+};
+
+float create_and_solve_ba_problem(
+    std::vector<std::tuple<size_t, float, float, size_t>> &bap,
+    std::vector<WorldPoint> &world_points,
+    std::vector<WorldPoint> &traj_positions,
+    std::vector<Eigen::Vector3f> &traj_rotations_angle_axis) {
+
+  double mut_focal mut_focal;
+  ceres::Problem problem;
+  for (int i = 0; i < bap.size(); ++i) {
+    ceres::CostFunction *cost_function = SnavelyReprojectionError::Create(
+        std::get<1>(bap[i]), std::get<2>(bap[i])
+        // add points from bap
+    );
+    problem.AddResidualBlock(
+        cost_function, NULL, &(traj_rotations_angle_axis[i]),
+        &(traj_positions[i]), &mut_focal, &(world_points[i]));
+  }
+
+  ceres::Solver::Options options;
+  options.linear_solver_type = ceres::DENSE_SCHUR;
+  options.minimizer_progress_to_stdout = true;
+
+  ceres::Solver::Summary summary;
+  ceres::Solve(options, &problem, &summary);
+  std::cout << summary.FullReport() << "\n";
+  return 0;
+}
 
 #endif // MAP_H_
