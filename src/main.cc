@@ -82,20 +82,14 @@ int main(int argc, char **argv) {
   std::cout << "Visualizing " << map.world_points_clouds.size() << " points."
             << std::endl;
   std::cout << "Trajectory Size: " << map.traj_points.size() << std::endl;
+  std::cout << "bap Size: " << map.ba_problem.size() << "\n";
 
-  std::cout << map.world_points_clouds[0] << std::endl;
-  std::cout << map.world_points_clouds[1] << std::endl;
-  std::cout << map.world_points_clouds[2] << std::endl;
-  std::cout << map.world_points_clouds[3] << std::endl;
-  std::cout << map.world_points_clouds[4] << std::endl;
+  std::cout << std::get<0>(map.ba_problem[0]) << std::endl;
+  std::cout << std::get<1>(map.ba_problem[1]) << " ";
+  std::cout << std::get<2>(map.ba_problem[2]) << " ";
+  std::cout << std::get<3>(map.ba_problem[3]) << " ";
 
   std::cout << std::endl << std::endl;
-
-  std::cout << map.traj_points[0] << std::endl;
-  std::cout << map.traj_points[1] << std::endl;
-  std::cout << map.traj_points[2] << std::endl;
-  std::cout << map.traj_points[3] << std::endl;
-  std::cout << map.traj_points[4] << std::endl;
 
   pangolin::CreateWindowAndBind("Renderer", 640, 480);
   glEnable(GL_DEPTH_TEST);

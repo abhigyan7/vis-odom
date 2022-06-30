@@ -38,6 +38,13 @@ uint32_t hash_keypoint(cv::KeyPoint kp) {
   return hash_keypoint(kp.pt.x, kp.pt.y);
 }
 
+uint32_t hash_point2f(cv::Point2f p2f) { return hash_keypoint(p2f.x, p2f.y); }
+
+void print_map(std::map<uint32_t, size_t> &myMap) {
+  for (auto it = myMap.cbegin(); it != myMap.cend(); ++it) {
+    std::cout << it->first << " " << it->second << "\n";
+  }
+}
 class WorldMap {
 public:
   std::vector<Frame> frames;
@@ -56,7 +63,7 @@ public:
   std::vector<cv::KeyPoint> keypoints_new, keypoints_old;
   cv::Mat descriptors_new, descriptors_old;
   std::vector<ImagePoint> imagepoints_old, imagepoints_new;
-  std::vector<WorldPoint> world_points;
+  std::vector<WorldPoint> world_points_in_this_iteration;
 
   std::vector<Eigen::Vector2f> image_points;
   std::vector<Eigen::Vector3f> world_points_ba;
@@ -155,6 +162,8 @@ public:
     std::cout << "Points new, old: " << points_new.size() << "points"
               << std::endl;
 
+    this->world_points_in_this_iteration.clear();
+
     Eigen::Vector3f world_point;
     Eigen::Vector3f camera_axis;
     camera_axis << 0, 0, -1;
@@ -168,7 +177,7 @@ public:
       if ((ta - world_point).norm() > 30)
         continue;
       this->world_points_clouds.push_back(world_point);
-      this->world_points.push_back(world_point);
+      this->world_points_in_this_iteration.push_back(world_point);
     }
 
     R << R_mat.at<double>(0, 0), R_mat.at<double>(0, 1), R_mat.at<double>(0, 2),
@@ -197,14 +206,42 @@ public:
     this->descriptors_old = this->descriptors_new;
     this->img_old = this->img_new;
 
+    std::map<uint32_t, size_t> old_associative_index;
+
+    std::cout << "MAP::::" << this->keypoint_pt_to_world_point_index.size();
+    print_map(this->keypoint_pt_to_world_point_index);
+
+    int found = 0, notfound = 0;
+
     for (int i = 0; i < world_points_mat.rows; i++) {
       if (this->keypoint_pt_to_world_point_index.count(
-              hash_keypoint(this->keypoints_old[i]))) {
-        // todo fix whatever this is
-        this->ba_problem.push_back({this->keypoint_pt_to_world_point_index[i],
-                                    0, 0, this->traj_rots_a.size() - 1});
+              hash_point2f(this->points_old[i]))) {
+        found++;
+        std::cout << "Found match" << std::endl;
+        this->ba_problem.push_back(
+            {this->keypoint_pt_to_world_point_index[i], // takes i to a world
+                                                        // point
+             this->points_new[i].x, // where the projection was found
+             this->points_new[i].y, // same but y
+             this->traj_rots_a.size() -
+                 1}); // index to traj_rots_a and traj_points
+        old_associative_index[hash_keypoint(this->keypoints_new[i])] =
+            this->keypoint_pt_to_world_point_index[i];
+      } else {
+        notfound++;
+        // std::cout << "Didnt find match" << std::endl;
+        this->world_points_ba.push_back(
+            this->world_points_in_this_iteration[i]);
+        old_associative_index[hash_keypoint(this->keypoints_new[i])] =
+            world_points_ba.size() - 1;
       }
     }
+
+    std::cout << "Found: " << found << ", notfound: " << notfound
+              << ", mapsize: " << old_associative_index.size() << std::endl;
+
+    this->keypoint_pt_to_world_point_index = old_associative_index;
+
     size_t world_points_ba_size_so_far = this->world_points_ba.size();
     for (int i = 0; i < world_points_mat.rows; i++) {
       this->keypoint_pt_to_world_point_index[hash_keypoint(
@@ -213,9 +250,6 @@ public:
       world_points_ba_size_so_far++;
     }
 
-    this->keypoint_pt_to_world_point_index.clear();
-    for (int i = 0; i < world_points_mat.rows; i++) {
-    }
     return true;
   }
 };
