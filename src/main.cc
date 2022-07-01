@@ -25,16 +25,14 @@
 // DONE switch to pangolin
 // DONE abstract away pangolin boilerplate
 // DONE switch back to imperative pangolin
-// TODO Create correspondences from optical flow results
-// TODO Create associated pose graph-y thing using optical flow - mask off
 // existing points when searching for new ones
-// TODO build pose graph from triangulated data
-// TODO encapsulate triangulation state into a class
+// DONE build pose graph from triangulated data
+// DONE encapsulate triangulation state into a class
 // DONE test for non negative dot product between viewing vector
 // and camera axis
 
-typedef Eigen::Vector3f WorldPoint;
-typedef Eigen::Vector2f ImagePoint;
+typedef Eigen::Vector3d WorldPoint;
+typedef Eigen::Vector2d ImagePoint;
 
 typedef struct {
   Eigen::Vector3f xyz;
@@ -63,7 +61,7 @@ int main(int argc, char **argv) {
   pp.x = 0.0;
   pp.y = 0.0;
 
-  std::vector<Eigen::Vector3f> world_point_clouds;
+  std::vector<Eigen::Vector3d> world_point_clouds;
   WorldMap map(700.0, pp, 2500, world_point_clouds);
   cv::Mat image, image_c;
 
@@ -79,18 +77,15 @@ int main(int argc, char **argv) {
     has_new_frames = vidcap.read(image_c);
   }
 
-  std::cout << "Visualizing " << map.world_points_clouds.size() << " points."
-            << std::endl;
-  std::cout << "Trajectory Size: " << map.traj_points.size() << std::endl;
   std::cout << "bap Size: " << map.ba_problem.size() << "\n";
 
-  std::cout << std::get<0>(map.ba_problem[0]) << std::endl;
-  std::cout << std::get<1>(map.ba_problem[1]) << " ";
-  std::cout << std::get<2>(map.ba_problem[2]) << " ";
-  std::cout << std::get<3>(map.ba_problem[3]) << " ";
+  float res = create_and_solve_ba_problem(map.ba_problem, map.world_points_ba,
+                                          map.camera_rt);
 
-  std::cout << std::endl << std::endl;
-
+  std::cout << "Visualizing " << map.world_points_ba.size() << " points."
+            << std::endl;
+  std::cout << "Trajectory Size: " << map.traj_points.size() << std::endl;
+  std::cout << "BA ERROR::" << res << std::endl;
   pangolin::CreateWindowAndBind("Renderer", 640, 480);
   glEnable(GL_DEPTH_TEST);
 
@@ -112,7 +107,7 @@ int main(int argc, char **argv) {
     glColor3f(1.0, 1.0, 1.0);
 
     glPointSize(1);
-    pangolin::glDrawPoints(map.world_points_clouds);
+    pangolin::glDrawPoints(map.world_points_ba);
     glColor3f(0.0, 0.0, 1.0);
     glPointSize(3);
     pangolin::glDrawPoints(map.traj_points);

@@ -14,8 +14,8 @@
 #include <ceres/ceres.h>
 #include <ceres/rotation.h>
 
-typedef Eigen::Vector3f WorldPoint;
-typedef Eigen::Vector2f ImagePoint;
+typedef Eigen::Vector3d WorldPoint;
+typedef Eigen::Vector2d ImagePoint;
 
 class Frame {
 public:
@@ -24,11 +24,11 @@ public:
   std::vector<ImagePoint> projected_points;
   // map from index in Frame::projected_points to WorldPoint id
   std::unordered_map<size_t, size_t> correspondences;
-  Eigen::Matrix3f R;
-  Eigen::Vector3f t;
+  Eigen::Matrix3d R;
+  Eigen::Vector3d t;
 };
 
-uint32_t hash_keypoint(float u, float v) {
+uint32_t hash_keypoint(double u, double v) {
   uint16_t iu = (int)u;
   uint16_t iv = (int)v;
 
@@ -55,31 +55,33 @@ public:
   cv::Point2f pp;
   size_t min_points_per_frame;
   std::vector<WorldPoint> world_points_clouds;
-  Eigen::Matrix3f Ra, R;
-  Eigen::Vector3f ta, t;
+  Eigen::Matrix3d Ra, R;
+  Eigen::Vector3d ta, t;
   std::vector<WorldPoint> traj_points;
-  std::vector<Eigen::Matrix3f> traj_rotations;
-  std::vector<Eigen::Vector3f> traj_rots_a;
+  std::vector<Eigen::Matrix3d> traj_rotations;
+  std::vector<Eigen::Vector3d> traj_rots_a;
   cv::Mat draw_img;
   std::vector<cv::KeyPoint> keypoints_new, keypoints_old;
   cv::Mat descriptors_new, descriptors_old;
   std::vector<ImagePoint> imagepoints_old, imagepoints_new;
   std::vector<WorldPoint> world_points_in_this_iteration;
 
-  std::vector<Eigen::Vector2f> image_points;
-  std::vector<Eigen::Vector3f> world_points_ba;
+  std::vector<Eigen::Vector2d> image_points;
+  std::vector<Eigen::Vector3d> world_points_ba;
   std::map<uint32_t, size_t> keypoint_pt_to_world_point_index;
 
   // world points, image points, pose indices
-  std::vector<std::tuple<size_t, float, float, size_t>> ba_problem;
+  std::vector<std::tuple<size_t, double, double, size_t>> ba_problem;
+
+  std::vector<Eigen::Vector<double, 6>> camera_rt;
 
 public:
   WorldMap(double focal, cv::Point2f pp, size_t min_points,
-           std::vector<Eigen::Vector3f> &world_point_clouds_in) {
-    Ra = Eigen::Matrix3f::Identity();
-    R = Eigen::Matrix3f::Identity();
-    t = Eigen::Vector3f::Zero();
-    ta = Eigen::Vector3f::Zero();
+           std::vector<Eigen::Vector3d> &world_point_clouds_in) {
+    Ra = Eigen::Matrix3d::Identity();
+    R = Eigen::Matrix3d::Identity();
+    t = Eigen::Vector3d::Zero();
+    ta = Eigen::Vector3d::Zero();
     this->focal = focal;
     this->pp = pp;
     this->min_points_per_frame = min_points;
@@ -108,6 +110,8 @@ public:
     std::vector<uchar> status;
     std::vector<float> error;
 
+    std::cout << "Frame: " << this->frames.size() << std::endl;
+
     keypoints_new.clear();
     this->descriptors_new.release();
 
@@ -117,14 +121,10 @@ public:
 
     std::vector<cv::DMatch> matches;
     feature_matcher->match(descriptors_new, descriptors_old, matches);
-    std::cout << "Matched " << matches.size() << " points" << std::endl;
 
     std::vector<cv::Point2f> temp_points_old, temp_points_new;
     cv::KeyPoint::convert(keypoints_old, temp_points_old);
     cv::KeyPoint::convert(keypoints_new, temp_points_new);
-
-    std::cout << "KEYPOINT" << temp_points_old[0] << temp_points_new[1]
-              << std::endl;
 
     points_old.clear();
     points_new.clear();
@@ -133,22 +133,10 @@ public:
       points_new.push_back(temp_points_new[match.queryIdx]);
     }
 
-    std::cout << "Pushed frame: " << this->frames.size() << ", ";
     cv::cvtColor(img_new, draw_img, cv::COLOR_GRAY2BGR);
     draw_kps(draw_img, points_old, points_new);
     cv::imshow("kps_2", draw_img);
     cv::waitKey(10);
-
-    // size_t i, k;
-    // for (i = k = 0; i < this->points_old.size(); i++) {
-    //   // if (!status[i])
-    //   // continue;
-    //   this->points_old[k++] = this->points_old[i];
-    //   this->points_new[k] = this->points_new[i];
-    // }
-
-    // this->points_old.resize(k);
-    // this->points_new.resize(k);
 
     cv::Mat world_points_mat;
     cv::Mat R_mat, t_mat;
@@ -160,22 +148,20 @@ public:
 
     std::cout << "Triangulated" << world_points_mat.size() << " points"
               << std::endl;
-    std::cout << "Points new, old: " << points_new.size() << "points"
-              << std::endl;
 
     this->world_points_in_this_iteration.clear();
 
-    Eigen::Vector3f world_point;
-    Eigen::Vector3f camera_axis;
+    Eigen::Vector3d world_point;
+    Eigen::Vector3d camera_axis;
     camera_axis << 0, 0, -1;
     for (int i = 0; i < world_points_mat.rows; i++) {
-      world_point = Ra * Eigen::Vector3f(world_points_mat.at<float>(i, 0),
-                                         world_points_mat.at<float>(i, 1),
-                                         world_points_mat.at<float>(i, 2)) +
+      world_point = Ra * Eigen::Vector3d(world_points_mat.at<double>(i, 0),
+                                         world_points_mat.at<double>(i, 1),
+                                         world_points_mat.at<double>(i, 2)) +
                     ta;
       if ((Ra * camera_axis).dot(ta - world_point) < 0)
         continue;
-      if ((ta - world_point).norm() > 30)
+      if ((ta - world_point).norm() > 10000000)
         continue;
       this->world_points_clouds.push_back(world_point);
       this->world_points_in_this_iteration.push_back(world_point);
@@ -188,20 +174,16 @@ public:
     ta = ta + Ra * t;
     Ra = R * (Ra);
 
-    Eigen::Vector3f Raa;
+    Eigen::Vector3d Raa;
     ceres::RotationMatrixToAngleAxis(Ra.data(), Raa.data());
-    std::cout << "ROTATION IN ANGLE AXIS:: ";
-    std::cout << Raa << std::endl;
 
     traj_points.push_back(ta);
     traj_rotations.push_back(Ra);
     traj_rots_a.push_back(Raa);
 
-    // for (size_t i = 0; i < matches.size(); i++) {
-    //   auto match = matches[i];
-
-    //   world_point_descriptors[match.trainIdx];
-    // }
+    Eigen::Vector<double, 6> camera_pose;
+    camera_pose << Raa[0], Raa[1], Raa[2], ta[0], ta[1], ta[2];
+    this->camera_rt.push_back(camera_pose);
 
     this->keypoints_old = this->keypoints_new;
     this->descriptors_old = this->descriptors_new;
@@ -209,12 +191,9 @@ public:
 
     std::map<uint32_t, size_t> old_associative_index;
 
-    std::cout << "MAP::::" << this->keypoint_pt_to_world_point_index.size();
-    print_map(this->keypoint_pt_to_world_point_index);
-
     int found = 0, notfound = 0;
 
-    for (int i = 0; i < world_points_mat.rows; i++) {
+    for (int i = 0; i < world_points_in_this_iteration.size(); i++) {
       if (this->keypoint_pt_to_world_point_index.count(
               hash_point2f(this->points_old[i]))) {
         found++;
@@ -227,7 +206,8 @@ public:
              this->traj_rots_a.size() -
                  1}); // index to traj_rots_a and traj_points
         old_associative_index[hash_keypoint(this->keypoints_new[i])] =
-            this->keypoint_pt_to_world_point_index[i];
+            this->keypoint_pt_to_world_point_index[hash_keypoint(
+                this->keypoints_old[i])];
       } else {
         notfound++;
         // std::cout << "Didnt find match" << std::endl;
@@ -248,55 +228,57 @@ public:
 };
 
 struct SnavelyReprojectionError {
-  SnavelyReprojectionError(float observed_x, float observed_y)
-      : observed_x(observed_x), observed_y(observed_y) {}
+  SnavelyReprojectionError(double observed_x, double observed_y,
+                           double focal_len)
+      : observed_x(observed_x), observed_y(observed_y), focal_len(focal_len) {}
 
   template <typename T>
-  bool operator()(const T *const camera_r, const T *const camera_t,
-                  const T *const f, const T *const point, T *residuals) const {
+  bool operator()(const T *const camera, const T *const point,
+                  T *residuals) const {
     T p[3];
-    ceres::AngleAxisRotatePoint(camera_r, point, p);
+    ceres::AngleAxisRotatePoint(camera, point, p);
 
-    p[0] += camera_t[3];
-    p[1] += camera_t[4];
-    p[2] += camera_t[5];
+    p[0] += camera[3];
+    p[1] += camera[4];
+    p[2] += camera[5];
 
     T xp = p[0] / p[2];
     T yp = p[1] / p[2];
 
-    T predicted_x = f * xp;
-    T predicted_y = f * yp;
+    T predicted_x = focal_len * xp;
+    T predicted_y = focal_len * yp;
 
     residuals[0] = predicted_x - observed_x;
     residuals[1] = predicted_y - observed_y;
     return true;
   }
 
-  static ceres::CostFunction *Create(const float observed_x,
-                                     const float observed_y) {
-    return (new ceres::AutoDiffCostFunction<SnavelyReprojectionError, 2, 3, 3,
-                                            1, 3>(
-        new SnavelyReprojectionError(observed_x, observed_y)));
+  static ceres::CostFunction *Create(const double observed_x,
+                                     const double observed_y,
+                                     const double focal_len) {
+    return (new ceres::AutoDiffCostFunction<SnavelyReprojectionError, 2, 6, 3>(
+        new SnavelyReprojectionError(observed_x, observed_y, focal_len)));
   }
-  double observed_x, observed_y;
+  double observed_x, observed_y, focal_len;
 };
 
 float create_and_solve_ba_problem(
-    std::vector<std::tuple<size_t, float, float, size_t>> &bap,
+    std::vector<std::tuple<size_t, double, double, size_t>> &bap,
     std::vector<WorldPoint> &world_points,
-    std::vector<WorldPoint> &traj_positions,
-    std::vector<Eigen::Vector3f> &traj_rotations_angle_axis) {
+    std::vector<Eigen::Vector<double, 6>> &traj_poses) {
 
-  double mut_focal mut_focal;
+  double focal = 700;
   ceres::Problem problem;
-  for (int i = 0; i < bap.size(); ++i) {
+
+  for (size_t i = 0; i < bap.size(); ++i) {
     ceres::CostFunction *cost_function = SnavelyReprojectionError::Create(
-        std::get<1>(bap[i]), std::get<2>(bap[i])
+        std::get<1>(bap[i]), std::get<2>(bap[i]), focal
         // add points from bap
     );
-    problem.AddResidualBlock(
-        cost_function, NULL, &(traj_rotations_angle_axis[i]),
-        &(traj_positions[i]), &mut_focal, &(world_points[i]));
+
+    problem.AddResidualBlock(cost_function, new ceres::HuberLoss(1.0),
+                             (traj_poses[std::get<3>(bap[i])].data()),
+                             (world_points[std::get<0>(bap[i])]).data());
   }
 
   ceres::Solver::Options options;

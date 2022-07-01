@@ -30,6 +30,8 @@ add_executable( ba ${BASRCS} )
 target_link_libraries( main ${OpenCV_LIBRARIES} )
 target_link_libraries( main ${GLEW_LIBRARIES})
 target_link_libraries( main ${Pangolin_LIBRARIES})
+target_link_libraries( main ${GLOG_LIBRARIES})
+target_link_libraries(main ${CERES_LIBRARIES})
 
 target_link_libraries( ba ${OpenCV_LIBRARIES} )
 target_link_libraries( ba ${CERES_LIBRARIES} )
