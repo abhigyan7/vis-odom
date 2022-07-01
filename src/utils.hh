@@ -127,6 +127,19 @@ template <typename T> T abs(T x) {
   return x;
 }
 
+void draw_kps(cv::Mat &image, std::vector<Eigen::Vector2d> p0,
+              std::vector<Eigen::Vector2d> p1) {
+  for (size_t idx = 0; idx < p0.size(); idx++) {
+    cv::Point2f kp1, kp2;
+    kp1.x = p0[idx][0];
+    kp1.y = p0[idx][1];
+    cv::circle(image, kp1, 1, cv::Scalar(0, 0, 225), cv::FILLED, cv::LINE_8);
+    kp2.x = p1[idx][0];
+    kp2.y = p1[idx][1];
+    cv::circle(image, kp2, 1, cv::Scalar(255, 0, 0), cv::FILLED, cv::LINE_8);
+    cv::line(image, kp1, kp2, cv::Scalar(255, 0, 0));
+  }
+}
 void draw_kps(cv::Mat &image, std::vector<cv::Point2f> p0,
               std::vector<cv::Point2f> p1) {
   for (size_t idx = 0; idx < p0.size(); idx++) {

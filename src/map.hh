@@ -133,11 +133,6 @@ public:
       points_new.push_back(temp_points_new[match.queryIdx]);
     }
 
-    cv::cvtColor(img_new, draw_img, cv::COLOR_GRAY2BGR);
-    draw_kps(draw_img, points_old, points_new);
-    cv::imshow("kps_2", draw_img);
-    cv::waitKey(10);
-
     cv::Mat world_points_mat;
     cv::Mat R_mat, t_mat;
 
@@ -166,6 +161,11 @@ public:
       this->world_points_clouds.push_back(world_point);
       this->world_points_in_this_iteration.push_back(world_point);
     }
+
+    cv::cvtColor(img_new, draw_img, cv::COLOR_GRAY2BGR);
+    draw_kps(draw_img, points_old, points_new);
+    cv::imshow("kps_2", draw_img);
+    cv::waitKey(10);
 
     R << R_mat.at<double>(0, 0), R_mat.at<double>(0, 1), R_mat.at<double>(0, 2),
         R_mat.at<double>(1, 0), R_mat.at<double>(1, 1), R_mat.at<double>(1, 2),
