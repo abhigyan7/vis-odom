@@ -153,10 +153,10 @@ public:
                                          world_points_mat.at<double>(i, 1),
                                          world_points_mat.at<double>(i, 2)) +
                     ta;
-      if ((Ra * camera_axis).dot(ta - world_point) < 0)
-        continue;
-      if ((ta - world_point).norm() > 10000000)
-        continue;
+      // if ((Ra * camera_axis).dot(ta - world_point) < 0)
+      //   continue;
+      // if ((ta - world_point).norm() > 10000000)
+      //   continue;
       this->world_points_clouds.push_back(world_point);
       this->world_points_in_this_iteration.push_back(world_point);
     }
