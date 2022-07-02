@@ -115,7 +115,6 @@ public:
     keypoints_new.clear();
     this->descriptors_new.release();
 
-    // detector->detect(this->img_2, keypoints_2, cv::Mat());
     detector->detectAndCompute(this->img_new, cv::Mat(), keypoints_new,
                                descriptors_new);
 
@@ -193,7 +192,7 @@ public:
 
     int found = 0, notfound = 0;
 
-    for (int i = 0; i < world_points_in_this_iteration.size(); i++) {
+    for (size_t i = 0; i < world_points_in_this_iteration.size(); i++) {
       if (this->keypoint_pt_to_world_point_index.count(
               hash_point2f(this->points_old[i]))) {
         found++;
@@ -210,7 +209,6 @@ public:
                 this->keypoints_old[i])];
       } else {
         notfound++;
-        // std::cout << "Didnt find match" << std::endl;
         this->world_points_ba.push_back(
             this->world_points_in_this_iteration[i]);
         old_associative_index[hash_keypoint(this->keypoints_new[i])] =
