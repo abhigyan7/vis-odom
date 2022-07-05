@@ -79,13 +79,13 @@ int main(int argc, char **argv) {
 
   std::cout << "bap Size: " << map.ba_problem.size() << "\n";
 
-  float res = create_and_solve_ba_problem(map.ba_problem, map.world_points_ba,
-                                          map.camera_rt);
+  // float res = create_and_solve_ba_problem(map.ba_problem,
+  // map.world_points_ba, map.camera_rt);
 
-  std::cout << "Visualizing " << map.world_points_ba.size() << " points."
+  std::cout << "Visualizing " << map.world_points_clouds.size() << " points."
             << std::endl;
   std::cout << "Trajectory Size: " << map.traj_points.size() << std::endl;
-  std::cout << "BA ERROR::" << res << std::endl;
+  // std::cout << "BA ERROR::" << res << std::endl;
   pangolin::CreateWindowAndBind("Renderer", 640, 480);
   glEnable(GL_DEPTH_TEST);
 
@@ -107,7 +107,7 @@ int main(int argc, char **argv) {
     glColor3f(1.0, 1.0, 1.0);
 
     glPointSize(1);
-    pangolin::glDrawPoints(map.world_points_ba);
+    pangolin::glDrawPoints(map.world_points_clouds);
     glColor3f(0.0, 0.0, 1.0);
     glPointSize(3);
     pangolin::glDrawPoints(map.traj_points);

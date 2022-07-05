@@ -89,7 +89,7 @@ public:
   }
 
   bool register_new_image(cv::Mat &new_img) {
-    auto feature_matcher = cv::BFMatcher::create();
+    auto feature_matcher = cv::BFMatcher::create(cv::NORM_HAMMING);
     auto detector = cv::ORB::create(2000);
     if (this->frames.size() == 0) {
       Frame frame_1;
@@ -118,9 +118,20 @@ public:
     detector->detectAndCompute(this->img_new, cv::Mat(), keypoints_new,
                                descriptors_new);
 
-    std::vector<cv::DMatch> matches;
-    feature_matcher->match(descriptors_new, descriptors_old, matches);
+    std::vector<std::vector<cv::DMatch>> raw_matches;
+    feature_matcher->knnMatch(descriptors_new, descriptors_old, raw_matches, 2);
 
+    std::vector<cv::DMatch> matches;
+
+    float nn_match_ratio = 0.8f;
+    for (size_t i = 0; i < raw_matches.size(); i++) {
+      cv::DMatch first = raw_matches[i][0];
+      float dist1 = raw_matches[i][0].distance;
+      float dist2 = raw_matches[i][1].distance;
+      if (dist1 < nn_match_ratio * dist2) {
+        matches.push_back(first);
+      }
+    }
     std::vector<cv::Point2f> temp_points_old, temp_points_new;
     cv::KeyPoint::convert(keypoints_old, temp_points_old);
     cv::KeyPoint::convert(keypoints_new, temp_points_new);
@@ -132,12 +143,17 @@ public:
       points_new.push_back(temp_points_new[match.queryIdx]);
     }
 
+    cv::cvtColor(img_new, draw_img, cv::COLOR_GRAY2BGR);
+    draw_kps(draw_img, points_old, points_new);
+    cv::imshow("kps_1", draw_img);
+    cv::waitKey(0);
+
     cv::Mat world_points_mat;
     cv::Mat R_mat, t_mat;
 
     std::cout << "Tried to triangulate" << points_new.size() << " points"
               << std::endl;
-    triangulate_points(points_new, points_old, focal, pp, R_mat, t_mat,
+    triangulate_points(points_old, points_new, focal, pp, R_mat, t_mat,
                        world_points_mat);
 
     std::cout << "Triangulated" << world_points_mat.size() << " points"
@@ -149,14 +165,14 @@ public:
     Eigen::Vector3d camera_axis;
     camera_axis << 0, 0, -1;
     for (int i = 0; i < world_points_mat.rows; i++) {
-      world_point = Ra * Eigen::Vector3d(world_points_mat.at<double>(i, 0),
-                                         world_points_mat.at<double>(i, 1),
-                                         world_points_mat.at<double>(i, 2)) +
+      world_point = Ra * Eigen::Vector3d(world_points_mat.at<float>(i, 0),
+                                         world_points_mat.at<float>(i, 1),
+                                         world_points_mat.at<float>(i, 2)) +
                     ta;
-      // if ((Ra * camera_axis).dot(ta - world_point) < 0)
-      //   continue;
-      // if ((ta - world_point).norm() > 10000000)
-      //   continue;
+      if ((Ra * camera_axis).dot(ta - world_point) < 0)
+        continue;
+      if ((ta - world_point).norm() > 30000)
+        continue;
       this->world_points_clouds.push_back(world_point);
       this->world_points_in_this_iteration.push_back(world_point);
     }
@@ -164,7 +180,7 @@ public:
     cv::cvtColor(img_new, draw_img, cv::COLOR_GRAY2BGR);
     draw_kps(draw_img, points_old, points_new);
     cv::imshow("kps_2", draw_img);
-    cv::waitKey(10);
+    cv::waitKey(0);
 
     R << R_mat.at<double>(0, 0), R_mat.at<double>(0, 1), R_mat.at<double>(0, 2),
         R_mat.at<double>(1, 0), R_mat.at<double>(1, 1), R_mat.at<double>(1, 2),
@@ -183,10 +199,6 @@ public:
     Eigen::Vector<double, 6> camera_pose;
     camera_pose << Raa[0], Raa[1], Raa[2], ta[0], ta[1], ta[2];
     this->camera_rt.push_back(camera_pose);
-
-    this->keypoints_old = this->keypoints_new;
-    this->descriptors_old = this->descriptors_new;
-    this->img_old = this->img_new;
 
     std::map<uint32_t, size_t> old_associative_index;
 
@@ -221,6 +233,9 @@ public:
 
     this->keypoint_pt_to_world_point_index = old_associative_index;
 
+    this->keypoints_old = this->keypoints_new;
+    this->descriptors_old = this->descriptors_new;
+    this->img_old = this->img_new;
     return true;
   }
 };

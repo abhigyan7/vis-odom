@@ -27,7 +27,6 @@ void triangulate_points(std::vector<cv::Point2f> &points_1,
       points_1, points_2, focal, pp, cv::RANSAC, 0.999, 1.0, 1000, mask);
   // std::cout << "Essential Matrix: " << essential_matrix << std::endl;
   filter_using_mask(points_1, mask);
-  filter_using_mask(points_2, mask);
   size_t s = filter_using_mask(points_2, mask);
 
   std::cout << "Size of points after filter: " << s << std::endl;
