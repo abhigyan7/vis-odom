@@ -58,11 +58,11 @@ int main(int argc, char **argv) {
   std::vector<glm::vec3> points;
 
   cv::Point2f pp;
-  pp.x = 0.0;
-  pp.y = 0.0;
+  pp.x = 620.0;
+  pp.y = 188.0;
 
   std::vector<Eigen::Vector3d> world_point_clouds;
-  WorldMap map(700.0, pp, 2500, world_point_clouds);
+  WorldMap map(718.0, pp, 1500, world_point_clouds);
   cv::Mat image, image_c;
 
   bool has_new_frames = true;
@@ -79,10 +79,10 @@ int main(int argc, char **argv) {
 
   std::cout << "bap Size: " << map.ba_problem.size() << "\n";
 
-  // float res = create_and_solve_ba_problem(map.ba_problem,
-  // map.world_points_ba, map.camera_rt);
+  float res = create_and_solve_ba_problem(map.ba_problem, map.world_points_ba,
+                                          map.camera_rt);
 
-  std::cout << "Visualizing " << map.world_points_clouds.size() << " points."
+  std::cout << "Visualizing " << map.world_points_ba.size() << " points."
             << std::endl;
   std::cout << "Trajectory Size: " << map.traj_points.size() << std::endl;
   // std::cout << "BA ERROR::" << res << std::endl;
@@ -101,13 +101,19 @@ int main(int argc, char **argv) {
   pangolin::SceneHandler handler(tree, s_cam);
   pangolin::View &d_cam = pangolin::CreateDisplay().SetHandler(&handler);
 
+  float idx = 0;
+
   while (!pangolin::ShouldQuit()) {
+    idx += 0.001;
     // Clear the screen and activate view to render into
     glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
     glColor3f(1.0, 1.0, 1.0);
 
     glPointSize(1);
-    pangolin::glDrawPoints(map.world_points_clouds);
+    pangolin::glDrawPoints(map.world_points_ba);
+    // pangolin::glDrawPoints(std::vector<Eigen::Vector3d>(
+    //     map.world_points_ba.begin(),
+    //     map.world_points_ba.begin() + (int)(idx * 1000)));
     glColor3f(0.0, 0.0, 1.0);
     glPointSize(3);
     pangolin::glDrawPoints(map.traj_points);

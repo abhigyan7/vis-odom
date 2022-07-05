@@ -17,10 +17,10 @@ int filter_using_mask(std::vector<cv::Point2f> &in_vector,
   return k;
 }
 
-void triangulate_points(std::vector<cv::Point2f> &points_1,
-                        std::vector<cv::Point2f> &points_2, double focal,
-                        cv::Point2d pp, cv::Mat &R, cv::Mat &t,
-                        cv::Mat &world_points) {
+int triangulate_points(std::vector<cv::Point2f> &points_1,
+                       std::vector<cv::Point2f> &points_2, double focal,
+                       cv::Point2d pp, cv::Mat &R, cv::Mat &t,
+                       cv::Mat &world_points) {
 
   std::vector<uchar> mask;
   cv::Mat essential_matrix = cv::findEssentialMat(
@@ -29,6 +29,8 @@ void triangulate_points(std::vector<cv::Point2f> &points_1,
   filter_using_mask(points_1, mask);
   size_t s = filter_using_mask(points_2, mask);
 
+  if (s == 0)
+    return s;
   std::cout << "Size of points after filter: " << s << std::endl;
   // recoverPose
   mask.clear();
@@ -37,6 +39,9 @@ void triangulate_points(std::vector<cv::Point2f> &points_1,
   filter_using_mask(points_1, mask);
   // std::cout << mask << std::endl;
   s = filter_using_mask(points_2, mask);
+
+  if (s == 0)
+    return s;
 
   std::cout << "Size of points after filter: " << s << std::endl;
   // triangulatePoints
@@ -71,6 +76,7 @@ void triangulate_points(std::vector<cv::Point2f> &points_1,
                         points_2, world_points_m);
 
   cv::convertPointsFromHomogeneous(world_points_m.t(), world_points);
+  return s;
 }
 
 #endif // TRIANGULATE_H_

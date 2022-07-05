@@ -146,15 +146,18 @@ public:
     cv::cvtColor(img_new, draw_img, cv::COLOR_GRAY2BGR);
     draw_kps(draw_img, points_old, points_new);
     cv::imshow("kps_1", draw_img);
-    cv::waitKey(0);
+    cv::waitKey(1);
 
     cv::Mat world_points_mat;
     cv::Mat R_mat, t_mat;
 
     std::cout << "Tried to triangulate" << points_new.size() << " points"
               << std::endl;
-    triangulate_points(points_old, points_new, focal, pp, R_mat, t_mat,
-                       world_points_mat);
+    size_t s = triangulate_points(points_old, points_new, focal, pp, R_mat,
+                                  t_mat, world_points_mat);
+    if (s == 0) {
+      return true;
+    }
 
     std::cout << "Triangulated" << world_points_mat.size() << " points"
               << std::endl;
@@ -171,7 +174,7 @@ public:
                     ta;
       if ((Ra * camera_axis).dot(ta - world_point) < 0)
         continue;
-      if ((ta - world_point).norm() > 30000)
+      if ((ta - world_point).norm() > 300)
         continue;
       this->world_points_clouds.push_back(world_point);
       this->world_points_in_this_iteration.push_back(world_point);
@@ -180,7 +183,7 @@ public:
     cv::cvtColor(img_new, draw_img, cv::COLOR_GRAY2BGR);
     draw_kps(draw_img, points_old, points_new);
     cv::imshow("kps_2", draw_img);
-    cv::waitKey(0);
+    cv::waitKey(1);
 
     R << R_mat.at<double>(0, 0), R_mat.at<double>(0, 1), R_mat.at<double>(0, 2),
         R_mat.at<double>(1, 0), R_mat.at<double>(1, 1), R_mat.at<double>(1, 2),
@@ -280,7 +283,7 @@ float create_and_solve_ba_problem(
     std::vector<WorldPoint> &world_points,
     std::vector<Eigen::Vector<double, 6>> &traj_poses) {
 
-  double focal = 700;
+  double focal = 718;
   ceres::Problem problem;
 
   for (size_t i = 0; i < bap.size(); ++i) {
@@ -295,7 +298,7 @@ float create_and_solve_ba_problem(
   }
 
   ceres::Solver::Options options;
-  options.linear_solver_type = ceres::DENSE_SCHUR;
+  options.linear_solver_type = ceres::ITERATIVE_SCHUR;
   options.minimizer_progress_to_stdout = true;
 
   ceres::Solver::Summary summary;
