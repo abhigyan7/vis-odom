@@ -77,6 +77,66 @@ int main(int argc, char **argv) {
     has_new_frames = vidcap.read(image_c);
   }
 
+  bool show_ba_problem = false;
+
+  cv::Mat image_g;
+  if (show_ba_problem) {
+
+    for (auto &ba_tuple : map.ba_problem) {
+      Eigen::Vector3d _world_point = map.world_points_ba[std::get<0>(ba_tuple)];
+      auto _x = std::get<1>(ba_tuple);
+      auto _y = std::get<2>(ba_tuple);
+      Eigen::Vector<double, 6> _cam_pos = map.camera_rt[std::get<3>(ba_tuple)];
+
+      Eigen::Vector2d _estimated_projection;
+      reproject(_cam_pos.data(), _world_point.data(),
+                _estimated_projection.data(), 718.0);
+      std::cout << "Expected: " << _x << ", " << _y
+                << ". Got: " << _estimated_projection[0] << ", "
+                << _estimated_projection[1] << std::endl;
+    }
+  }
+  if (false) {
+    vidcap.open(argv[1]);
+
+    count = 0;
+    while (has_new_frames && count < max_count) {
+      has_new_frames = vidcap.read(image_c);
+      has_new_frames = vidcap.read(image_c);
+
+      for (auto &ba_tuple : map.ba_problem) {
+        if (std::get<3>(ba_tuple) == count) {
+          auto p = cv::Point2f(std::get<1>(ba_tuple), std::get<2>(ba_tuple));
+          cv::circle(image_c, p, 1, cv::Scalar(0, 255, 0), cv::FILLED,
+                     cv::LINE_8);
+          // cv::putText(image_c, std::to_string(std::get<0>(ba_tuple)), p,
+          //             cv::FONT_HERSHEY_DUPLEX, 1, cv::Scalar(0, 255, 0));
+          std::cout << "Expected: " << std::get<1>(ba_tuple) << ", "
+                    << std::get<2>(ba_tuple) << std::endl;
+          auto snavely_repro_error_functor = SnavelyReprojectionError(
+              std::get<2>(ba_tuple), std::get<1>(ba_tuple), 718.0);
+          Eigen::Vector2d reprojection_residual;
+          snavely_repro_error_functor(
+              map.camera_rt[std::get<3>(ba_tuple)].data(),
+              map.world_points_ba[std::get<0>(ba_tuple)].data(),
+              reprojection_residual.data());
+          std::cout << "Residual: " << reprojection_residual << std::endl;
+        }
+      }
+
+      cv::cvtColor(image_c, image_g, cv::COLOR_BGR2GRAY);
+      cv::cvtColor(image_c, image_g, cv::COLOR_BGR2GRAY);
+      cv::imshow("ba_diagnostics", image_c);
+      char c = cv::waitKey(0);
+      count++;
+      if (c == 'q') {
+        break;
+      }
+    }
+  }
+
+  cv::destroyAllWindows();
+
   std::cout << "bap Size: " << map.ba_problem.size() << "\n";
 
   float res = create_and_solve_ba_problem(map.ba_problem, map.world_points_ba,
@@ -101,10 +161,12 @@ int main(int argc, char **argv) {
   pangolin::SceneHandler handler(tree, s_cam);
   pangolin::View &d_cam = pangolin::CreateDisplay().SetHandler(&handler);
 
-  float idx = 0;
+  int idx = 0;
+
+  std::cout << map.world_points_ba[0] << std::endl;
 
   while (!pangolin::ShouldQuit()) {
-    idx += 0.001;
+    idx++;
     // Clear the screen and activate view to render into
     glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
     glColor3f(1.0, 1.0, 1.0);
@@ -125,6 +187,13 @@ int main(int argc, char **argv) {
     // map.focal, map.pp.y / map.pp.x, 10.0);
     d_cam.Activate(s_cam);
     pangolin::FinishFrame();
+
+    // if (idx % 1000 == 0) {
+
+    //  float res = create_and_solve_ba_problem(
+    //      map.ba_problem, map.world_points_ba, map.camera_rt);
+    //  std::cout << map.traj_points[7] << std::endl;
+    //}
   }
 
   return 0;

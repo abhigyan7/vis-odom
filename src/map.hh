@@ -90,7 +90,7 @@ public:
 
   bool register_new_image(cv::Mat &new_img) {
     auto feature_matcher = cv::BFMatcher::create(cv::NORM_HAMMING);
-    auto detector = cv::ORB::create(2000);
+    auto detector = cv::ORB::create(3000);
     if (this->frames.size() == 0) {
       Frame frame_1;
       frame_1.image = new_img;
@@ -174,7 +174,7 @@ public:
                     ta;
       if ((Ra * camera_axis).dot(ta - world_point) < 0)
         continue;
-      if ((ta - world_point).norm() > 300)
+      if ((ta - world_point).norm() > 30)
         continue;
       this->world_points_clouds.push_back(world_point);
       this->world_points_in_this_iteration.push_back(world_point);
@@ -243,6 +243,54 @@ public:
   }
 };
 
+template <typename T>
+bool reproject(T *camera, T *point, T *prediction, T focal_len) {
+
+  std::cout << "In reproject: " << std::endl;
+  // clang-format off
+  std::cout << camera[0] << ", "
+            << camera[1] << ", "
+            << camera[2] << ", "
+            << camera[3] << ", "
+            << camera[4] << ", "
+            << camera[5] << std::endl;
+  std::cout << "Point: " << point[0] << ", " << point[1] << ", " << point[2] << std::endl;
+  T r[9];
+  ceres::AngleAxisToRotationMatrix(camera, r);
+  std::cout << "Rotation matrix: " << r[0] << ", " << r[1] << ", "<< r[2] << std::endl
+                                   << r[3] << ", " << r[4] << ", "<< r[5] << std::endl
+                                   << r[6] << ", " << r[7] << ", "<< r[8] << std::endl;
+  // clang-format on
+  T p1[3], p2[3], rot[3];
+
+  p1[0] = point[0] - camera[3];
+  p1[1] = point[1] - camera[4];
+  p1[2] = point[2] - camera[5];
+
+  rot[0] = -camera[0];
+  rot[1] = -camera[1];
+  rot[2] = -camera[2];
+
+  ceres::AngleAxisRotatePoint(rot, p1, p2);
+
+  std::cout << "rotated: " << p2[0] << ", " << p2[1] << ", " << p2[2]
+            << std::endl;
+  T xp = p2[0] / p2[2];
+  T yp = p2[1] / p2[2];
+
+  std::cout << "xpyp: " << xp << ", " << yp << std::endl;
+
+  T predicted_x = focal_len * xp + 620.5;
+  T predicted_y = focal_len * yp + 188.0;
+
+  prediction[0] = predicted_x;
+  prediction[1] = predicted_y;
+
+  std::cout << "Predicted: " << predicted_x << ", " << predicted_y << std::endl;
+
+  return true;
+}
+
 struct SnavelyReprojectionError {
   SnavelyReprojectionError(double observed_x, double observed_y,
                            double focal_len)
@@ -251,21 +299,30 @@ struct SnavelyReprojectionError {
   template <typename T>
   bool operator()(const T *const camera, const T *const point,
                   T *residuals) const {
-    T p[3];
-    ceres::AngleAxisRotatePoint(camera, point, p);
+    T p1[3], p2[3], rot[3];
 
-    p[0] += camera[3];
-    p[1] += camera[4];
-    p[2] += camera[5];
+    p1[0] = point[0] - camera[3];
+    p1[1] = point[1] - camera[4];
+    p1[2] = point[2] - camera[5];
 
-    T xp = p[0] / p[2];
-    T yp = p[1] / p[2];
+    rot[0] = -camera[0];
+    rot[1] = -camera[1];
+    rot[2] = -camera[2];
 
-    T predicted_x = focal_len * xp;
-    T predicted_y = focal_len * yp;
+    ceres::AngleAxisRotatePoint(rot, p1, p2);
 
-    residuals[0] = predicted_x - observed_x;
-    residuals[1] = predicted_y - observed_y;
+    T xp = p2[0] / p2[2];
+    T yp = p2[1] / p2[2];
+
+    T predicted_x = focal_len * xp + 607.5;
+    T predicted_y = focal_len * yp + 185.0;
+
+    // std::cout << "(" << predicted_x << ", " << predicted_y << "), ("
+    //           << observed_x << ", " << observed_y << ")" << std::endl;
+
+    residuals[0] = predicted_x - T(observed_x);
+    residuals[1] = predicted_y - T(observed_y);
+
     return true;
   }
 
@@ -283,7 +340,7 @@ float create_and_solve_ba_problem(
     std::vector<WorldPoint> &world_points,
     std::vector<Eigen::Vector<double, 6>> &traj_poses) {
 
-  double focal = 718;
+  double focal = 718.0;
   ceres::Problem problem;
 
   for (size_t i = 0; i < bap.size(); ++i) {
@@ -300,6 +357,7 @@ float create_and_solve_ba_problem(
   ceres::Solver::Options options;
   options.linear_solver_type = ceres::ITERATIVE_SCHUR;
   options.minimizer_progress_to_stdout = true;
+  options.max_num_iterations = 10;
 
   ceres::Solver::Summary summary;
   ceres::Solve(options, &problem, &summary);
