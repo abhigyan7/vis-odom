@@ -189,8 +189,8 @@ public:
         R_mat.at<double>(1, 0), R_mat.at<double>(1, 1), R_mat.at<double>(1, 2),
         R_mat.at<double>(2, 0), R_mat.at<double>(2, 1), R_mat.at<double>(2, 2);
     t << t_mat.at<double>(0), t_mat.at<double>(1), t_mat.at<double>(2);
-    ta = ta + Ra * t;
     Ra = R * (Ra);
+    ta = ta + Ra * t;
 
     Eigen::Vector3d Raa;
     ceres::RotationMatrixToAngleAxis(Ra.data(), Raa.data());
@@ -349,7 +349,7 @@ float create_and_solve_ba_problem(
         // add points from bap
     );
 
-    problem.AddResidualBlock(cost_function, new ceres::HuberLoss(1.0),
+    problem.AddResidualBlock(cost_function, new ceres::HuberLoss(0.10),
                              (traj_poses[std::get<3>(bap[i])].data()),
                              (world_points[std::get<0>(bap[i])]).data());
   }
@@ -357,7 +357,7 @@ float create_and_solve_ba_problem(
   ceres::Solver::Options options;
   options.linear_solver_type = ceres::ITERATIVE_SCHUR;
   options.minimizer_progress_to_stdout = true;
-  options.max_num_iterations = 10;
+  options.max_num_iterations = 15;
 
   ceres::Solver::Summary summary;
   ceres::Solve(options, &problem, &summary);
