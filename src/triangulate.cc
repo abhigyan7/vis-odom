@@ -1,9 +1,4 @@
-#ifndef TRIANGULATE_H_
-#define TRIANGULATE_H_
-
-#include <Eigen/Eigen>
-#include <opencv2/opencv.hpp>
-#include <stdint.h>
+#include "triangulate.hh"
 
 int filter_using_mask(std::vector<cv::Point2f> &in_vector,
                       std::vector<uchar> mask) {
@@ -78,5 +73,3 @@ int triangulate_points(std::vector<cv::Point2f> &points_1,
   cv::convertPointsFromHomogeneous(world_points_m.t(), world_points);
   return s;
 }
-
-#endif // TRIANGULATE_H_

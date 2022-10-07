@@ -18,33 +18,8 @@
 #include "triangulate.hh"
 #include "utils.hh"
 
-// DONE create constructors
-// DONE triangulate points from image pairs
-// DONE create trajectories from CV::Mat type Rt to Eigen types
-// DONE render trajectory in Polyscope
-// DONE switch to pangolin
-// DONE abstract away pangolin boilerplate
-// DONE switch back to imperative pangolin
-// existing points when searching for new ones
-// DONE build pose graph from triangulated data
-// DONE encapsulate triangulation state into a class
-// DONE test for non negative dot product between viewing vector
-// and camera axis
-
 typedef Eigen::Vector3d WorldPoint;
 typedef Eigen::Vector2d ImagePoint;
-
-typedef struct {
-  Eigen::Vector3f xyz;
-  cv::Mat descriptors_1, descriptors_2;
-} World;
-
-typedef struct {
-  union {
-    float x, y;
-    float xy[2];
-  };
-} Keypoint;
 
 int main(int argc, char **argv) {
   if (argc != 3) {
