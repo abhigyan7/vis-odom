@@ -81,15 +81,19 @@ public:
 
   bool register_new_image(cv::Mat &new_img, float translation_norm) {
     auto feature_matcher = cv::BFMatcher::create(cv::NORM_HAMMING);
-    auto detector = cv::ORB::create(this->min_points_per_frame);
+    int fast_threshold = 20;
+    bool nonmaxSupression = true;
+    auto detector = cv::ORB::create(this->min_points_per_frame, 1.2f, 8, 31, 0,
+                                    2, cv::ORB::FAST_SCORE);
+
     if (this->frames.size() == 0) {
       Frame frame_1;
       frame_1.image = new_img;
       this->frames.push_back(frame_1);
       this->img_old = new_img.clone();
 
-      detector->detectAndCompute(this->img_old, cv::Mat(), keypoints_old,
-                                 descriptors_old);
+      cv::FAST(new_img, keypoints_old, fast_threshold, nonmaxSupression);
+      detector->compute(this->img_old, keypoints_old, descriptors_old);
       return true;
     }
 
@@ -106,8 +110,8 @@ public:
     keypoints_new.clear();
     this->descriptors_new.release();
 
-    detector->detectAndCompute(this->img_new, cv::Mat(), keypoints_new,
-                               descriptors_new);
+    cv::FAST(img_new, keypoints_new, fast_threshold, nonmaxSupression);
+    detector->compute(this->img_new, keypoints_new, descriptors_new);
 
     std::vector<std::vector<cv::DMatch>> raw_matches;
     feature_matcher->knnMatch(descriptors_new, descriptors_old, raw_matches, 2);

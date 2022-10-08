@@ -86,6 +86,7 @@ int main(int argc, char **argv) {
   pangolin::View &d_cam = pangolin::CreateDisplay().SetHandler(&handler);
 
   bool has_new_frames = true;
+  bool has_map_been_optimized = false;
   has_new_frames = vidcap.read(image_c);
   size_t count = 0;
   while (!pangolin::ShouldQuit()) {
@@ -109,10 +110,26 @@ int main(int argc, char **argv) {
     d_cam.Activate(s_cam);
     pangolin::FinishFrame();
 
-    if (!has_new_frames)
+    if (!has_new_frames || count > max_count) {
+      // TODO delete this line
       continue;
-    if (count > max_count)
+
+      if (has_map_been_optimized)
+        continue;
+
+      std::cout << "bap Size: " << map.ba_problem.size() << "\n";
+      float res = create_and_solve_ba_problem(
+          map.ba_problem, map.world_points_ba, map.camera_rt, map.focal_length,
+          map.pp.x, map.pp.y);
+
+      std::cout << "Visualizing " << map.world_points_ba.size() << " points."
+                << std::endl;
+      std::cout << "Trajectory Size: " << map.traj_points.size() << std::endl;
+
+      std::cout << map.world_points_ba[0] << std::endl;
+      has_map_been_optimized = true;
       continue;
+    }
 
     float ground_truth_translation_norm = 1.0;
     if (poses_file_exists) {
@@ -134,18 +151,6 @@ int main(int argc, char **argv) {
   }
 
   cv::destroyAllWindows();
-
-  std::cout << "bap Size: " << map.ba_problem.size() << "\n";
-  // float res = create_and_solve_ba_problem(map.ba_problem,
-  // map.world_points_ba,
-  //                                         map.camera_rt, map.focal_length,
-  //                                         map.pp.x, map.pp.y);
-
-  std::cout << "Visualizing " << map.world_points_ba.size() << " points."
-            << std::endl;
-  std::cout << "Trajectory Size: " << map.traj_points.size() << std::endl;
-
-  std::cout << map.world_points_ba[0] << std::endl;
 
   return 0;
 }
