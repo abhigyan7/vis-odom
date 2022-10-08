@@ -1,6 +1,7 @@
 #ifndef MAP_H_
 #define MAP_H_
 
+#include <opencv4/opencv2/core/types.hpp>
 #include <opencv4/opencv2/imgproc.hpp>
 #include <stdint.h>
 #include <stdio.h>
@@ -177,8 +178,15 @@ public:
 
     cv::cvtColor(img_new, draw_img, cv::COLOR_GRAY2BGR);
     draw_kps(draw_img, points_old, points_new);
-    cv::putText(draw_img, "test", cv::Point(0, 20), cv::FONT_HERSHEY_DUPLEX,
-                0.8, cv::Scalar(0, 1, 0));
+    cv::rectangle(draw_img, cv::Rect2i(0, 0, 300, 40),
+                  cv::Scalar(240, 240, 240), -1);
+    std::string info_string = "f_id: ";
+    info_string += std::to_string(this->frames.size());
+    info_string += ", ";
+    info_string += std::to_string(s);
+    info_string += " points";
+    cv::putText(draw_img, info_string, cv::Point(0, 30),
+                cv::FONT_HERSHEY_DUPLEX, 0.8, cv::Scalar(255, 0, 0), 2.0);
     cv::imshow("kps_2", draw_img);
     cv::waitKey(1);
 
