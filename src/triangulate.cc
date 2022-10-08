@@ -1,4 +1,4 @@
-#include "triangulate.hh"
+#include "../inc/triangulate.hh"
 
 int filter_using_mask(std::vector<cv::Point2f> &in_vector,
                       std::vector<uchar> mask) {

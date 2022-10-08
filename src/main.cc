@@ -1,4 +1,5 @@
 #include <Eigen/Eigen>
+#include <fstream>
 #include <glm/glm.hpp>
 #include <iostream>
 #include <opencv2/opencv.hpp>
@@ -14,16 +15,17 @@
 
 #include <cstring>
 
-#include "map.hh"
-#include "triangulate.hh"
-#include "utils.hh"
+#include "../inc/map.hh"
+#include "../inc/triangulate.hh"
+#include "../inc/utils.hh"
 
 typedef Eigen::Vector3d WorldPoint;
 typedef Eigen::Vector2d ImagePoint;
 
 int main(int argc, char **argv) {
-  if (argc != 3) {
-    printf("usage: main <video-file>.mp4\n");
+  if (argc < 6) {
+    printf("usage: main <video-file>.mp4 frame_id f cx cy n_features "
+           "poses_file\n");
     return -1;
   }
   cv::VideoCapture vidcap;
@@ -33,11 +35,32 @@ int main(int argc, char **argv) {
   std::vector<glm::vec3> points;
 
   cv::Point2f pp;
-  pp.x = 620.0;
-  pp.y = 188.0;
+  float focal_length;
+
+  pp.x = std::stof(argv[4]);
+  pp.y = std::stof(argv[5]);
+
+  focal_length = std::stof(argv[3]);
+
+  int n_features = std::stoi(argv[6]);
+
+  std::cout << pp.x << ", " << pp.y << ", " << focal_length;
+
+  std::string poses_file_name;
+  bool poses_file_exists = false;
+
+  float r11, r12, r13, t1, r21, r22, r23, t2, r31, r32, r33, t3;
+  float last_t1 = 0, last_t2 = 0, last_t3 = 0;
+
+  std::ifstream poses_file;
+  if (argc > 7) {
+    poses_file_name = argv[7];
+    poses_file = std::ifstream(poses_file_name);
+    poses_file_exists = true;
+  }
 
   std::vector<Eigen::Vector3d> world_point_clouds;
-  WorldMap map(718.0, pp, 1500, world_point_clouds);
+  WorldMap map(focal_length, pp, n_features, world_point_clouds);
   cv::Mat image, image_c;
 
   bool has_new_frames = true;
@@ -46,81 +69,36 @@ int main(int argc, char **argv) {
   size_t count = 0;
   while (has_new_frames && (count < max_count)) {
     cv::cvtColor(image_c, image, cv::COLOR_BGR2GRAY);
-    map.register_new_image(image);
+
+    float translation_norm = 1.0;
+    if (poses_file_exists) {
+      poses_file >> r11 >> r12 >> r13 >> t1 >> r21 >> r22 >> r23 >> t2 >> r31 >>
+          r32 >> r33 >> t3;
+      float _t1 = last_t1 - t1;
+      float _t2 = last_t2 - t2;
+      float _t3 = last_t3 - t3;
+      translation_norm = sqrt(_t1 * _t1 + _t2 * _t2 + _t3 * _t3);
+      last_t1 = t1;
+      last_t2 = t2;
+      last_t3 = t3;
+      std::cout << "Translation scale: " << translation_norm << std::endl;
+    }
+    map.register_new_image(image, translation_norm);
+
     count++;
     has_new_frames = vidcap.read(image_c);
-    has_new_frames = vidcap.read(image_c);
   }
-
-  bool show_ba_problem = false;
-
-  cv::Mat image_g;
-  if (show_ba_problem) {
-
-    for (auto &ba_tuple : map.ba_problem) {
-      Eigen::Vector3d _world_point = map.world_points_ba[std::get<0>(ba_tuple)];
-      auto _x = std::get<1>(ba_tuple);
-      auto _y = std::get<2>(ba_tuple);
-      Eigen::Vector<double, 6> _cam_pos = map.camera_rt[std::get<3>(ba_tuple)];
-
-      Eigen::Vector2d _estimated_projection;
-      reproject(_cam_pos.data(), _world_point.data(),
-                _estimated_projection.data(), 718.0);
-      std::cout << "Expected: " << _x << ", " << _y
-                << ". Got: " << _estimated_projection[0] << ", "
-                << _estimated_projection[1] << std::endl;
-    }
-  }
-  if (false) {
-    vidcap.open(argv[1]);
-
-    count = 0;
-    while (has_new_frames && count < max_count) {
-      has_new_frames = vidcap.read(image_c);
-      has_new_frames = vidcap.read(image_c);
-
-      for (auto &ba_tuple : map.ba_problem) {
-        if (std::get<3>(ba_tuple) == count) {
-          auto p = cv::Point2f(std::get<1>(ba_tuple), std::get<2>(ba_tuple));
-          cv::circle(image_c, p, 1, cv::Scalar(0, 255, 0), cv::FILLED,
-                     cv::LINE_8);
-          // cv::putText(image_c, std::to_string(std::get<0>(ba_tuple)), p,
-          //             cv::FONT_HERSHEY_DUPLEX, 1, cv::Scalar(0, 255, 0));
-          std::cout << "Expected: " << std::get<1>(ba_tuple) << ", "
-                    << std::get<2>(ba_tuple) << std::endl;
-          auto snavely_repro_error_functor = SnavelyReprojectionError(
-              std::get<2>(ba_tuple), std::get<1>(ba_tuple), 718.0);
-          Eigen::Vector2d reprojection_residual;
-          snavely_repro_error_functor(
-              map.camera_rt[std::get<3>(ba_tuple)].data(),
-              map.world_points_ba[std::get<0>(ba_tuple)].data(),
-              reprojection_residual.data());
-          std::cout << "Residual: " << reprojection_residual << std::endl;
-        }
-      }
-
-      cv::cvtColor(image_c, image_g, cv::COLOR_BGR2GRAY);
-      cv::cvtColor(image_c, image_g, cv::COLOR_BGR2GRAY);
-      cv::imshow("ba_diagnostics", image_c);
-      char c = cv::waitKey(0);
-      count++;
-      if (c == 'q') {
-        break;
-      }
-    }
-  }
-
   cv::destroyAllWindows();
 
   std::cout << "bap Size: " << map.ba_problem.size() << "\n";
-
-  float res = create_and_solve_ba_problem(map.ba_problem, map.world_points_ba,
-                                          map.camera_rt);
+  // float res = create_and_solve_ba_problem(map.ba_problem,
+  // map.world_points_ba,
+  //                                         map.camera_rt, map.focal_length,
+  //                                         map.pp.x, map.pp.y);
 
   std::cout << "Visualizing " << map.world_points_ba.size() << " points."
             << std::endl;
   std::cout << "Trajectory Size: " << map.traj_points.size() << std::endl;
-  // std::cout << "BA ERROR::" << res << std::endl;
   pangolin::CreateWindowAndBind("Renderer", 640, 480);
   glEnable(GL_DEPTH_TEST);
 
@@ -144,31 +122,20 @@ int main(int argc, char **argv) {
     idx++;
     // Clear the screen and activate view to render into
     glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
-    glColor3f(1.0, 1.0, 1.0);
 
+    // draw the point cloud
+    glColor3f(1.0, 1.0, 1.0);
     glPointSize(1);
     pangolin::glDrawPoints(map.world_points_ba);
-    // pangolin::glDrawPoints(std::vector<Eigen::Vector3d>(
-    //     map.world_points_ba.begin(),
-    //     map.world_points_ba.begin() + (int)(idx * 1000)));
+
+    // draw the camera trajectory
     glColor3f(0.0, 0.0, 1.0);
     glPointSize(3);
     pangolin::glDrawPoints(map.traj_points);
     pangolin::glDrawVertices(map.traj_points, GL_LINE_STRIP);
-    glPointSize(1);
-    Eigen::Vector3d one, two;
-    glColor3f(1.0, 0.0, 0.0);
-    // draw_cameras_from_trajectory(map.traj_points, map.traj_rotations,
-    // map.focal, map.pp.y / map.pp.x, 10.0);
+
     d_cam.Activate(s_cam);
     pangolin::FinishFrame();
-
-    // if (idx % 1000 == 0) {
-
-    //  float res = create_and_solve_ba_problem(
-    //      map.ba_problem, map.world_points_ba, map.camera_rt);
-    //  std::cout << map.traj_points[7] << std::endl;
-    //}
   }
 
   return 0;

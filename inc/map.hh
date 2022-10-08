@@ -1,18 +1,19 @@
 #ifndef MAP_H_
 #define MAP_H_
 
-#include "utils.hh"
-#include <Eigen/Eigen>
-#include <glm/glm.hpp>
-#include <iostream>
-#include <opencv2/opencv.hpp>
+#include <opencv4/opencv2/imgproc.hpp>
 #include <stdint.h>
 #include <stdio.h>
 
-#include "triangulate.hh"
-
+#include <Eigen/Eigen>
 #include <ceres/ceres.h>
 #include <ceres/rotation.h>
+#include <glm/glm.hpp>
+#include <iostream>
+#include <opencv2/opencv.hpp>
+
+#include "triangulate.hh"
+#include "utils.hh"
 
 typedef Eigen::Vector3d WorldPoint;
 typedef Eigen::Vector2d ImagePoint;
@@ -39,8 +40,8 @@ public:
   std::vector<Frame> frames;
   cv::Mat img_old, img_new;
   std::vector<cv::Point2f> points_old, points_new;
-  double focal;
   cv::Point2f pp;
+  double focal_length;
   size_t min_points_per_frame;
   std::vector<WorldPoint> world_points_clouds;
   Eigen::Matrix3d Ra, R;
@@ -64,21 +65,23 @@ public:
   std::vector<Eigen::Vector<double, 6>> camera_rt;
 
 public:
-  WorldMap(double focal, cv::Point2f pp, size_t min_points,
+  WorldMap(float focal_length, cv::Point2f pp, size_t min_points,
            std::vector<Eigen::Vector3d> &world_point_clouds_in) {
-    Ra = Eigen::Matrix3d::Identity();
-    R = Eigen::Matrix3d::Identity();
-    t = Eigen::Vector3d::Zero();
-    ta = Eigen::Vector3d::Zero();
-    this->focal = focal;
+
+    this->Ra = Eigen::Matrix3d::Identity();
+    this->R = Eigen::Matrix3d::Identity();
+    this->t = Eigen::Vector3d::Zero();
+    this->ta = Eigen::Vector3d::Zero();
+
+    this->focal_length = focal_length;
     this->pp = pp;
     this->min_points_per_frame = min_points;
     this->world_points_clouds = world_point_clouds_in;
   }
 
-  bool register_new_image(cv::Mat &new_img) {
+  bool register_new_image(cv::Mat &new_img, float translation_norm) {
     auto feature_matcher = cv::BFMatcher::create(cv::NORM_HAMMING);
-    auto detector = cv::ORB::create(3000);
+    auto detector = cv::ORB::create(this->min_points_per_frame);
     if (this->frames.size() == 0) {
       Frame frame_1;
       frame_1.image = new_img;
@@ -133,16 +136,16 @@ public:
 
     cv::cvtColor(img_new, draw_img, cv::COLOR_GRAY2BGR);
     draw_kps(draw_img, points_old, points_new);
-    cv::imshow("kps_1", draw_img);
-    cv::waitKey(1);
+    // cv::imshow("kps_1", draw_img);
+    // cv::waitKey(1);
 
     cv::Mat world_points_mat;
     cv::Mat R_mat, t_mat;
 
     std::cout << "Tried to triangulate" << points_new.size() << " points"
               << std::endl;
-    size_t s = triangulate_points(points_old, points_new, focal, pp, R_mat,
-                                  t_mat, world_points_mat);
+    size_t s = triangulate_points(points_old, points_new, focal_length, pp,
+                                  R_mat, t_mat, world_points_mat);
     if (s == 0) {
       return true;
     }
@@ -170,6 +173,8 @@ public:
 
     cv::cvtColor(img_new, draw_img, cv::COLOR_GRAY2BGR);
     draw_kps(draw_img, points_old, points_new);
+    cv::putText(draw_img, "test", cv::Point(0, 20), cv::FONT_HERSHEY_DUPLEX,
+                0.8, cv::Scalar(0, 1, 0));
     cv::imshow("kps_2", draw_img);
     cv::waitKey(1);
 
@@ -177,6 +182,7 @@ public:
         R_mat.at<double>(1, 0), R_mat.at<double>(1, 1), R_mat.at<double>(1, 2),
         R_mat.at<double>(2, 0), R_mat.at<double>(2, 1), R_mat.at<double>(2, 2);
     t << t_mat.at<double>(0), t_mat.at<double>(1), t_mat.at<double>(2);
+    t = t * (1 / t.norm()) * translation_norm;
     Ra = R * (Ra);
     ta = ta + Ra * t;
 
@@ -231,58 +237,11 @@ public:
   }
 };
 
-template <typename T>
-bool reproject(T *camera, T *point, T *prediction, T focal_len) {
-
-  std::cout << "In reproject: " << std::endl;
-  // clang-format off
-  std::cout << camera[0] << ", "
-            << camera[1] << ", "
-            << camera[2] << ", "
-            << camera[3] << ", "
-            << camera[4] << ", "
-            << camera[5] << std::endl;
-  std::cout << "Point: " << point[0] << ", " << point[1] << ", " << point[2] << std::endl;
-  T r[9];
-  ceres::AngleAxisToRotationMatrix(camera, r);
-  std::cout << "Rotation matrix: " << r[0] << ", " << r[1] << ", "<< r[2] << std::endl
-                                   << r[3] << ", " << r[4] << ", "<< r[5] << std::endl
-                                   << r[6] << ", " << r[7] << ", "<< r[8] << std::endl;
-  // clang-format on
-  T p1[3], p2[3], rot[3];
-
-  p1[0] = point[0] - camera[3];
-  p1[1] = point[1] - camera[4];
-  p1[2] = point[2] - camera[5];
-
-  rot[0] = -camera[0];
-  rot[1] = -camera[1];
-  rot[2] = -camera[2];
-
-  ceres::AngleAxisRotatePoint(rot, p1, p2);
-
-  std::cout << "rotated: " << p2[0] << ", " << p2[1] << ", " << p2[2]
-            << std::endl;
-  T xp = p2[0] / p2[2];
-  T yp = p2[1] / p2[2];
-
-  std::cout << "xpyp: " << xp << ", " << yp << std::endl;
-
-  T predicted_x = focal_len * xp + 620.5;
-  T predicted_y = focal_len * yp + 188.0;
-
-  prediction[0] = predicted_x;
-  prediction[1] = predicted_y;
-
-  std::cout << "Predicted: " << predicted_x << ", " << predicted_y << std::endl;
-
-  return true;
-}
-
-struct SnavelyReprojectionError {
-  SnavelyReprojectionError(double observed_x, double observed_y,
-                           double focal_len)
-      : observed_x(observed_x), observed_y(observed_y), focal_len(focal_len) {}
+struct PerspectiveProjectionError {
+  PerspectiveProjectionError(double observed_x, double observed_y,
+                             double focal_len, double pp_x, double pp_y)
+      : observed_x(observed_x), observed_y(observed_y), focal_len(focal_len),
+        pp_x(pp_x), pp_y(pp_y) {}
 
   template <typename T>
   bool operator()(const T *const camera, const T *const point,
@@ -302,11 +261,8 @@ struct SnavelyReprojectionError {
     T xp = p2[0] / p2[2];
     T yp = p2[1] / p2[2];
 
-    T predicted_x = focal_len * xp + 607.5;
-    T predicted_y = focal_len * yp + 185.0;
-
-    // std::cout << "(" << predicted_x << ", " << predicted_y << "), ("
-    //           << observed_x << ", " << observed_y << ")" << std::endl;
+    T predicted_x = focal_len * xp + pp_x;
+    T predicted_y = focal_len * yp + pp_y;
 
     residuals[0] = predicted_x - T(observed_x);
     residuals[1] = predicted_y - T(observed_y);
@@ -316,16 +272,20 @@ struct SnavelyReprojectionError {
 
   static ceres::CostFunction *Create(const double observed_x,
                                      const double observed_y,
-                                     const double focal_len) {
-    return (new ceres::AutoDiffCostFunction<SnavelyReprojectionError, 2, 6, 3>(
-        new SnavelyReprojectionError(observed_x, observed_y, focal_len)));
+                                     const double focal_len, const double pp_x,
+                                     const double pp_y) {
+    return (
+        new ceres::AutoDiffCostFunction<PerspectiveProjectionError, 2, 6, 3>(
+            new PerspectiveProjectionError(observed_x, observed_y, focal_len,
+                                           pp_x, pp_y)));
   }
-  double observed_x, observed_y, focal_len;
+  double observed_x, observed_y, focal_len, pp_x, pp_y;
 };
 
 float create_and_solve_ba_problem(
     std::vector<std::tuple<size_t, double, double, size_t>> &bap,
     std::vector<WorldPoint> &world_points,
-    std::vector<Eigen::Vector<double, 6>> &traj_poses);
+    std::vector<Eigen::Vector<double, 6>> &traj_poses, double f, double pp_x,
+    double pp_y);
 
 #endif // MAP_H_

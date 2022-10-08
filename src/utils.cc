@@ -1,4 +1,4 @@
-#include "utils.hh"
+#include "../inc/utils.hh"
 
 void mat_R_t_from_R_and_t(Eigen::Vector3d t, Eigen::Matrix3d R,
                           Eigen::Matrix4d &R_t) {

@@ -1,4 +1,4 @@
-#include "map.hh"
+#include "../inc/map.hh"
 
 uint32_t hash_keypoint(double u, double v) {
   uint16_t iu = (int)u;
@@ -16,16 +16,14 @@ uint32_t hash_point2f(cv::Point2f p2f) { return hash_keypoint(p2f.x, p2f.y); }
 float create_and_solve_ba_problem(
     std::vector<std::tuple<size_t, double, double, size_t>> &bap,
     std::vector<WorldPoint> &world_points,
-    std::vector<Eigen::Vector<double, 6>> &traj_poses) {
+    std::vector<Eigen::Vector<double, 6>> &traj_poses, double f, double pp_x,
+    double pp_y) {
 
-  double focal = 718.0;
   ceres::Problem problem;
 
   for (size_t i = 0; i < bap.size(); ++i) {
-    ceres::CostFunction *cost_function = SnavelyReprojectionError::Create(
-        std::get<1>(bap[i]), std::get<2>(bap[i]), focal
-        // add points from bap
-    );
+    ceres::CostFunction *cost_function = PerspectiveProjectionError::Create(
+        std::get<1>(bap[i]), std::get<2>(bap[i]), f, pp_x, pp_y);
 
     problem.AddResidualBlock(cost_function, new ceres::HuberLoss(0.10),
                              (traj_poses[std::get<3>(bap[i])].data()),
