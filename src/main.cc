@@ -22,6 +22,15 @@
 typedef Eigen::Vector3d WorldPoint;
 typedef Eigen::Vector2d ImagePoint;
 
+Eigen::Vector3d parse_translation(std::ifstream &_poses_file) {
+  float r11, r12, r13, t1, r21, r22, r23, t2, r31, r32, r33, t3;
+  _poses_file >> r11 >> r12 >> r13 >> t1 >> r21 >> r22 >> r23 >> t2 >> r31 >>
+      r32 >> r33 >> t3;
+  Eigen::Vector3d ret;
+  ret << t1, t2, t3;
+  return ret;
+}
+
 int main(int argc, char **argv) {
   if (argc < 6) {
     printf("usage: main <video-file>.mp4 frame_id f cx cy n_features "
@@ -44,13 +53,11 @@ int main(int argc, char **argv) {
 
   int n_features = std::stoi(argv[6]);
 
-  std::cout << pp.x << ", " << pp.y << ", " << focal_length;
-
   std::string poses_file_name;
   bool poses_file_exists = false;
 
-  float r11, r12, r13, t1, r21, r22, r23, t2, r31, r32, r33, t3;
-  float last_t1 = 0, last_t2 = 0, last_t3 = 0;
+  Eigen::Vector3d ground_truth_pose;
+  std::vector<Eigen::Vector3d> ground_truth_poses;
 
   std::ifstream poses_file;
   if (argc > 7) {
@@ -63,31 +70,69 @@ int main(int argc, char **argv) {
   WorldMap map(focal_length, pp, n_features, world_point_clouds);
   cv::Mat image, image_c;
 
+  pangolin::CreateWindowAndBind("Renderer", 640, 480);
+  glEnable(GL_DEPTH_TEST);
+
+  pangolin::OpenGlRenderState s_cam(
+      pangolin::ProjectionMatrix(640, 480, 420, 420, 320, 240, 0.1, 1000),
+      pangolin::ModelViewLookAt(-2, 2, -2, 0, 0, 0, pangolin::AxisY));
+  pangolin::Renderable tree;
+  for (size_t i = 0; i < 10; ++i) {
+    auto axis_i = std::make_shared<pangolin::Axis>();
+    axis_i->T_pc = pangolin::OpenGlMatrix::Translate(i * 20, i * 0.1, 0.0);
+    tree.Add(axis_i);
+  }
+  pangolin::SceneHandler handler(tree, s_cam);
+  pangolin::View &d_cam = pangolin::CreateDisplay().SetHandler(&handler);
+
   bool has_new_frames = true;
   has_new_frames = vidcap.read(image_c);
-  cv::cvtColor(image_c, image, cv::COLOR_BGR2GRAY);
   size_t count = 0;
-  while (has_new_frames && (count < max_count)) {
+  while (!pangolin::ShouldQuit()) {
     cv::cvtColor(image_c, image, cv::COLOR_BGR2GRAY);
 
-    float translation_norm = 1.0;
+    glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
+    // glColor3f(1.0, 1.0, 1.0);
+    // glPointSize(1);
+    // pangolin::glDrawPoints(map.world_points_ba);
+
+    glColor3f(0.0, 0.0, 1.0);
+    glPointSize(3);
+    pangolin::glDrawPoints(map.traj_points);
+    pangolin::glDrawVertices(map.traj_points, GL_LINE_STRIP);
+
+    glColor3f(0.0, 1.0, 0.0);
+    glPointSize(3);
+    pangolin::glDrawPoints(ground_truth_poses);
+    pangolin::glDrawVertices(ground_truth_poses, GL_LINE_STRIP);
+
+    d_cam.Activate(s_cam);
+    pangolin::FinishFrame();
+
+    if (!has_new_frames)
+      continue;
+    if (count > max_count)
+      continue;
+
+    float ground_truth_translation_norm = 1.0;
     if (poses_file_exists) {
-      poses_file >> r11 >> r12 >> r13 >> t1 >> r21 >> r22 >> r23 >> t2 >> r31 >>
-          r32 >> r33 >> t3;
-      float _t1 = last_t1 - t1;
-      float _t2 = last_t2 - t2;
-      float _t3 = last_t3 - t3;
-      translation_norm = sqrt(_t1 * _t1 + _t2 * _t2 + _t3 * _t3);
-      last_t1 = t1;
-      last_t2 = t2;
-      last_t3 = t3;
-      std::cout << "Translation scale: " << translation_norm << std::endl;
+
+      ground_truth_pose = parse_translation(poses_file);
+      if (ground_truth_poses.size() > 0) {
+        ground_truth_translation_norm =
+            (ground_truth_poses.back() - ground_truth_pose).norm();
+      } else {
+        ground_truth_translation_norm = ground_truth_pose.norm();
+      }
+      ground_truth_poses.push_back(ground_truth_pose);
     }
-    map.register_new_image(image, translation_norm);
+
+    map.register_new_image(image, ground_truth_translation_norm);
 
     count++;
     has_new_frames = vidcap.read(image_c);
   }
+
   cv::destroyAllWindows();
 
   std::cout << "bap Size: " << map.ba_problem.size() << "\n";
@@ -99,44 +144,8 @@ int main(int argc, char **argv) {
   std::cout << "Visualizing " << map.world_points_ba.size() << " points."
             << std::endl;
   std::cout << "Trajectory Size: " << map.traj_points.size() << std::endl;
-  pangolin::CreateWindowAndBind("Renderer", 640, 480);
-  glEnable(GL_DEPTH_TEST);
-
-  pangolin::OpenGlRenderState s_cam(
-      pangolin::ProjectionMatrix(640, 480, 420, 420, 320, 240, 0.1, 1000),
-      pangolin::ModelViewLookAt(0, 0.5, -3, 0, 0, 0, pangolin::AxisY));
-  pangolin::Renderable tree;
-  for (size_t i = 0; i < 10; ++i) {
-    auto axis_i = std::make_shared<pangolin::Axis>();
-    axis_i->T_pc = pangolin::OpenGlMatrix::Translate(i * 20, i * 0.1, 0.0);
-    tree.Add(axis_i);
-  }
-  pangolin::SceneHandler handler(tree, s_cam);
-  pangolin::View &d_cam = pangolin::CreateDisplay().SetHandler(&handler);
-
-  int idx = 0;
 
   std::cout << map.world_points_ba[0] << std::endl;
-
-  while (!pangolin::ShouldQuit()) {
-    idx++;
-    // Clear the screen and activate view to render into
-    glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
-
-    // draw the point cloud
-    glColor3f(1.0, 1.0, 1.0);
-    glPointSize(1);
-    pangolin::glDrawPoints(map.world_points_ba);
-
-    // draw the camera trajectory
-    glColor3f(0.0, 0.0, 1.0);
-    glPointSize(3);
-    pangolin::glDrawPoints(map.traj_points);
-    pangolin::glDrawVertices(map.traj_points, GL_LINE_STRIP);
-
-    d_cam.Activate(s_cam);
-    pangolin::FinishFrame();
-  }
 
   return 0;
 }

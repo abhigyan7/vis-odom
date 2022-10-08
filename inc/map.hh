@@ -101,7 +101,7 @@ public:
     std::vector<uchar> status;
     std::vector<float> error;
 
-    std::cout << "Frame: " << this->frames.size() << std::endl;
+    // std::cout << "Frame: " << this->frames.size() << std::endl;
 
     keypoints_new.clear();
     this->descriptors_new.release();
@@ -142,16 +142,16 @@ public:
     cv::Mat world_points_mat;
     cv::Mat R_mat, t_mat;
 
-    std::cout << "Tried to triangulate" << points_new.size() << " points"
-              << std::endl;
-    size_t s = triangulate_points(points_old, points_new, focal_length, pp,
+    // std::cout << "Tried to triangulate" << points_new.size() << " points"
+    // << std::endl;
+    size_t s = triangulate_points(points_new, points_old, focal_length, pp,
                                   R_mat, t_mat, world_points_mat);
     if (s == 0) {
       return true;
     }
 
-    std::cout << "Triangulated" << world_points_mat.size() << " points"
-              << std::endl;
+    // std::cout << "Triangulated" << world_points_mat.size() << " points"
+    // << std::endl;
 
     this->world_points_in_this_iteration.clear();
 
@@ -182,9 +182,13 @@ public:
         R_mat.at<double>(1, 0), R_mat.at<double>(1, 1), R_mat.at<double>(1, 2),
         R_mat.at<double>(2, 0), R_mat.at<double>(2, 1), R_mat.at<double>(2, 2);
     t << t_mat.at<double>(0), t_mat.at<double>(1), t_mat.at<double>(2);
-    t = t * (1 / t.norm()) * translation_norm;
-    Ra = R * (Ra);
-    ta = ta + Ra * t;
+
+    if (translation_norm > 0.1 && (t[0] < t[2]) && (t[1] < t[2])) {
+      t = t * (1 / t.norm()) * translation_norm;
+      ta = ta + Ra * t;
+      Ra = R * (Ra);
+      std::cout << "ta" << ta << std::endl;
+    }
 
     Eigen::Vector3d Raa;
     ceres::RotationMatrixToAngleAxis(Ra.data(), Raa.data());
@@ -225,8 +229,8 @@ public:
       }
     }
 
-    std::cout << "Found: " << found << ", notfound: " << notfound
-              << ", mapsize: " << old_associative_index.size() << std::endl;
+    // std::cout << "Found: " << found << ", notfound: " << notfound
+    // << ", mapsize: " << old_associative_index.size() << std::endl;
 
     this->keypoint_pt_to_world_point_index = old_associative_index;
 

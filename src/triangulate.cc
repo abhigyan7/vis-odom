@@ -12,33 +12,36 @@ int filter_using_mask(std::vector<cv::Point2f> &in_vector,
   return k;
 }
 
-int triangulate_points(std::vector<cv::Point2f> &points_1,
-                       std::vector<cv::Point2f> &points_2, double focal,
+int triangulate_points(std::vector<cv::Point2f> &new_points,
+                       std::vector<cv::Point2f> &old_points, double focal,
                        cv::Point2d pp, cv::Mat &R, cv::Mat &t,
                        cv::Mat &world_points) {
 
   std::vector<uchar> mask;
   cv::Mat essential_matrix = cv::findEssentialMat(
-      points_1, points_2, focal, pp, cv::RANSAC, 0.999, 1.0, 1000, mask);
+      new_points, old_points, focal, pp, cv::RANSAC, 0.999, 1.0, 1000, mask);
+  size_t s;
   // std::cout << "Essential Matrix: " << essential_matrix << std::endl;
-  filter_using_mask(points_1, mask);
-  size_t s = filter_using_mask(points_2, mask);
+  filter_using_mask(new_points, mask);
+  s = filter_using_mask(old_points, mask);
 
   if (s == 0)
     return s;
-  std::cout << "Size of points after filter: " << s << std::endl;
+
+  // std::cout << "Size of points after filter: " << s << std::endl;
   // recoverPose
   mask.clear();
-  cv::recoverPose(essential_matrix, points_1, points_2, R, t, focal, pp, mask);
+  cv::recoverPose(essential_matrix, new_points, old_points, R, t, focal, pp,
+                  mask);
   // std::cout << "Pose: " << R << "    " << t << std::endl;
-  filter_using_mask(points_1, mask);
+  filter_using_mask(new_points, mask);
   // std::cout << mask << std::endl;
-  s = filter_using_mask(points_2, mask);
+  s = filter_using_mask(old_points, mask);
 
   if (s == 0)
     return s;
 
-  std::cout << "Size of points after filter: " << s << std::endl;
+  // std::cout << "Size of points after filter: " << s << std::endl;
   // triangulatePoints
   cv::Mat proj_mat_1, proj_mat_2, points4D;
   // std::cout << CV_32F << " CV_32F\n";
@@ -59,16 +62,13 @@ int triangulate_points(std::vector<cv::Point2f> &points_1,
   intrinsics.at<float>(1, 2) = pp.y;
   intrinsics.at<float>(2, 2) = 1.0;
 
-  // std::cout << "Intrinsics: " << intrinsics << " and R_t: " << R_t_2
-  // << std::endl;
-
   cv::Mat projectionMatrix_1 = intrinsics * R_t;
   cv::Mat projectionMatrix_2 = intrinsics * R_t_2;
 
   cv::Mat world_points_m;
 
-  cv::triangulatePoints(projectionMatrix_1, projectionMatrix_2, points_1,
-                        points_2, world_points_m);
+  cv::triangulatePoints(projectionMatrix_1, projectionMatrix_2, old_points,
+                        new_points, world_points_m);
 
   cv::convertPointsFromHomogeneous(world_points_m.t(), world_points);
   return s;
