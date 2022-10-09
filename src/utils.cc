@@ -138,3 +138,12 @@ void draw_kps(cv::Mat &image, std::vector<cv::Point2f> p0,
     cv::line(image, p0[idx], p1[idx], cv::Scalar(255, 0, 0));
   }
 }
+
+Eigen::Vector3d parse_translation(std::ifstream &_poses_file) {
+  float r11, r12, r13, t1, r21, r22, r23, t2, r31, r32, r33, t3;
+  _poses_file >> r11 >> r12 >> r13 >> t1 >> r21 >> r22 >> r23 >> t2 >> r31 >>
+      r32 >> r33 >> t3;
+  Eigen::Vector3d ret;
+  ret << t1, t2, t3;
+  return ret;
+}

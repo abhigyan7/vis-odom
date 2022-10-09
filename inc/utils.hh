@@ -1,6 +1,8 @@
 #ifndef UTILS_H_
 #define UTILS_H_
 
+#include <fstream>
+
 #include <Eigen/Eigen>
 #include <glm/glm.hpp>
 #include <opencv2/opencv.hpp>
@@ -30,5 +32,7 @@ void draw_kps(cv::Mat &image, std::vector<Eigen::Vector2d> p0,
 
 void draw_kps(cv::Mat &image, std::vector<cv::Point2f> p0,
               std::vector<cv::Point2f> p1);
+
+Eigen::Vector3d parse_translation(std::ifstream &in);
 
 #endif // UTILS_H_

@@ -18,69 +18,55 @@
 
 typedef Eigen::Vector3d WorldPoint;
 typedef Eigen::Vector2d ImagePoint;
+typedef Eigen::Matrix3d RotationMatrix;
 
 class Frame {
 public:
-  cv::Mat image;
-  // all the matched projections in this image
-  std::vector<ImagePoint> projected_points;
-  // map from index in Frame::projected_points to WorldPoint id
-  std::unordered_map<size_t, size_t> correspondences;
+  size_t id;
   Eigen::Matrix3d R;
-  Eigen::Vector3d t;
+  WorldPoint t;
+
+  Frame(size_t _id, Eigen::Matrix3d _R, WorldPoint _t)
+      : id(_id), R(_R), t(_t) {}
 };
 
-uint32_t hash_keypoint(double, double);
-
-uint32_t hash_keypoint(cv::KeyPoint);
-
-uint32_t hash_point2f(cv::Point2f);
+class Correspondence {
+public:
+  size_t world_point_idx;
+  size_t frame_idx;
+  ImagePoint image_point;
+};
 
 class WorldMap {
 public:
+  std::vector<Correspondence> correspondences;
   std::vector<Frame> frames;
-  cv::Mat img_old, img_new;
-  std::vector<cv::Point2f> points_old, points_new;
-  cv::Point2f pp;
-  double focal_length;
+  std::vector<WorldPoint> world_points;
+
   size_t min_points_per_frame;
-  std::vector<WorldPoint> world_points_clouds;
-  Eigen::Matrix3d Ra, R;
-  Eigen::Vector3d ta, t;
-  std::vector<WorldPoint> traj_points;
-  std::vector<Eigen::Matrix3d> traj_rotations;
-  std::vector<Eigen::Vector3d> traj_rots_a;
-  cv::Mat draw_img;
+  std::vector<cv::Point2f> points_old, points_new;
   std::vector<cv::KeyPoint> keypoints_new, keypoints_old;
   cv::Mat descriptors_new, descriptors_old;
-  std::vector<ImagePoint> imagepoints_old, imagepoints_new;
-  std::vector<WorldPoint> world_points_in_this_iteration;
+  cv::Mat img_old, img_new, draw_img;
+  Eigen::Matrix3d Ra, R;
+  Eigen::Vector3d ta, t;
 
-  std::vector<Eigen::Vector2d> image_points;
-  std::vector<Eigen::Vector3d> world_points_ba;
-  std::map<uint32_t, size_t> keypoint_pt_to_world_point_index;
+  std::vector<WorldPoint> traj_points;
 
-  // world points, image points, pose indices
-  std::vector<std::tuple<size_t, double, double, size_t>> ba_problem;
-
-  std::vector<Eigen::Vector<double, 6>> camera_rt;
+  cv::Point2f pp;
+  double focal_length;
 
 public:
-  WorldMap(float focal_length, cv::Point2f pp, size_t min_points,
-           std::vector<Eigen::Vector3d> &world_point_clouds_in) {
+  WorldMap(float focal_length, cv::Point2f pp, size_t min_points)
+      : focal_length(focal_length), pp(pp), min_points_per_frame(min_points) {
 
     this->Ra = Eigen::Matrix3d::Identity();
+    this->ta = Eigen::Vector3d::Zero();
     this->R = Eigen::Matrix3d::Identity();
     this->t = Eigen::Vector3d::Zero();
-    this->ta = Eigen::Vector3d::Zero();
-
-    this->focal_length = focal_length;
-    this->pp = pp;
-    this->min_points_per_frame = min_points;
-    this->world_points_clouds = world_point_clouds_in;
   }
 
-  bool register_new_image(cv::Mat &new_img, float translation_norm) {
+  bool register_new_image(cv::Mat &new_img, float translation_norm = 1.0) {
     auto feature_matcher = cv::BFMatcher::create(cv::NORM_HAMMING);
     int fast_threshold = 20;
     bool nonmaxSupression = true;
@@ -88,25 +74,18 @@ public:
                                     2, cv::ORB::FAST_SCORE);
 
     if (this->frames.size() == 0) {
-      Frame frame_1;
-      frame_1.image = new_img;
-      this->frames.push_back(frame_1);
       this->img_old = new_img.clone();
 
       cv::FAST(new_img, keypoints_old, fast_threshold, nonmaxSupression);
       detector->compute(this->img_old, keypoints_old, descriptors_old);
+      this->frames.push_back(Frame(this->frames.size(), this->Ra, this->ta));
       return true;
     }
 
-    Frame frame_2;
-    frame_2.image = new_img;
-    this->frames.push_back(frame_2);
     this->img_new = new_img.clone();
 
     std::vector<uchar> status;
     std::vector<float> error;
-
-    // std::cout << "Frame: " << this->frames.size() << std::endl;
 
     keypoints_new.clear();
     this->descriptors_new.release();
@@ -128,6 +107,7 @@ public:
         matches.push_back(first);
       }
     }
+
     std::vector<cv::Point2f> temp_points_old, temp_points_new;
     cv::KeyPoint::convert(keypoints_old, temp_points_old);
     cv::KeyPoint::convert(keypoints_new, temp_points_new);
@@ -141,28 +121,22 @@ public:
 
     cv::cvtColor(img_new, draw_img, cv::COLOR_GRAY2BGR);
     draw_kps(draw_img, points_old, points_new);
-    // cv::imshow("kps_1", draw_img);
-    // cv::waitKey(1);
 
     cv::Mat world_points_mat;
     cv::Mat R_mat, t_mat;
 
-    // std::cout << "Tried to triangulate" << points_new.size() << " points"
-    // << std::endl;
     size_t s = triangulate_points(points_new, points_old, focal_length, pp,
                                   R_mat, t_mat, world_points_mat);
+
     if (s == 0) {
       return true;
     }
 
-    // std::cout << "Triangulated" << world_points_mat.size() << " points"
-    // << std::endl;
-
-    this->world_points_in_this_iteration.clear();
-
     Eigen::Vector3d world_point;
     Eigen::Vector3d camera_axis;
     camera_axis << 0, 0, -1;
+    std::vector<size_t> world_points_indices_for_this_frame;
+    std::vector<WorldPoint> triangulated_points;
     for (int i = 0; i < world_points_mat.rows; i++) {
       world_point = Ra * Eigen::Vector3d(world_points_mat.at<float>(i, 0),
                                          world_points_mat.at<float>(i, 1),
@@ -172,8 +146,9 @@ public:
         continue;
       if ((ta - world_point).norm() > 30)
         continue;
-      this->world_points_clouds.push_back(world_point);
-      this->world_points_in_this_iteration.push_back(world_point);
+      world_points_indices_for_this_frame.push_back(this->world_points.size());
+      triangulated_points.push_back(world_point);
+      this->world_points.push_back(world_point);
     }
 
     cv::cvtColor(img_new, draw_img, cv::COLOR_GRAY2BGR);
@@ -195,60 +170,22 @@ public:
         R_mat.at<double>(2, 0), R_mat.at<double>(2, 1), R_mat.at<double>(2, 2);
     t << t_mat.at<double>(0), t_mat.at<double>(1), t_mat.at<double>(2);
 
-    if (translation_norm > 0.1 && (t[0] < t[2]) && (t[1] < t[2])) {
+    if (translation_norm > 0.1) {
       t = t * (1 / t.norm()) * translation_norm;
       ta = ta + Ra * t;
       Ra = R * (Ra);
-      std::cout << "ta" << ta << std::endl;
+      std::cout << "Frame: " << this->frames.size();
+      std::cout << ", Translation: (" << ta[0] << ", " << ta[1] << ", " << ta[2]
+                << ")" << std::endl;
     }
-
-    Eigen::Vector3d Raa;
-    ceres::RotationMatrixToAngleAxis(Ra.data(), Raa.data());
 
     traj_points.push_back(ta);
-    traj_rotations.push_back(Ra);
-    traj_rots_a.push_back(Raa);
+    this->frames.push_back(Frame(this->frames.size(), this->Ra, this->ta));
 
-    Eigen::Vector<double, 6> camera_pose;
-    camera_pose << Raa[0], Raa[1], Raa[2], ta[0], ta[1], ta[2];
-    this->camera_rt.push_back(camera_pose);
-
-    std::map<uint32_t, size_t> old_associative_index;
-
-    int found = 0, notfound = 0;
-
-    for (size_t i = 0; i < world_points_in_this_iteration.size(); i++) {
-      if (this->keypoint_pt_to_world_point_index.count(
-              hash_point2f(this->points_old[i]))) {
-        found++;
-        this->ba_problem.push_back(
-            {this->keypoint_pt_to_world_point_index[hash_point2f(
-                 this->points_old[i])], // takes i to a world
-                                        // point
-             this->points_new[i].x,     // where the projection was found
-             this->points_new[i].y,     // same but y
-             this->traj_rots_a.size() -
-                 1}); // index to traj_rots_a and traj_points
-        old_associative_index[hash_keypoint(this->keypoints_new[i])] =
-            this->keypoint_pt_to_world_point_index[hash_keypoint(
-                this->keypoints_old[i])];
-      } else {
-        notfound++;
-        this->world_points_ba.push_back(
-            this->world_points_in_this_iteration[i]);
-        old_associative_index[hash_keypoint(this->keypoints_new[i])] =
-            world_points_ba.size() - 1;
-      }
-    }
-
-    // std::cout << "Found: " << found << ", notfound: " << notfound
-    // << ", mapsize: " << old_associative_index.size() << std::endl;
-
-    this->keypoint_pt_to_world_point_index = old_associative_index;
-
+    this->img_old = this->img_new;
     this->keypoints_old = this->keypoints_new;
     this->descriptors_old = this->descriptors_new;
-    this->img_old = this->img_new;
+
     return true;
   }
 };
