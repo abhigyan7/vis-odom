@@ -6,6 +6,11 @@ is for this pipeline to develop full-fledged monocular SLAM capabilities
 with support for sensors such as inertial measurement units and global 
 positioning. 
 
+![](https://github.com/abhigyan7/vis-odom/raw/main/mono-vo-optimized.gif)
+
+Blue line is the output from the pipeline, green line is ground truth trajectory.
+
+
 ### Build
 I build the code against the latest versions of OpenCV, Ceres solver and 
 glog that's available in archlinux. I use pangolin v0.6 due to a bug in 
